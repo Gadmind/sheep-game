@@ -15,7 +15,7 @@ const CONFIG = {
     maxSlot: 7,          // 卡槽最大容量
 
     // 难度调节：修改 difficulty 后，新游戏会使用对应难度（layers/rows/cols/cardTypes/maxSlot 等）
-    difficulty: 'debug', // easy, normal, hard, debug
+    difficulty: 'easy', // easy, normal, hard, debug（默认选中简单模式）
     difficulties: {
         debug: {
             layers: 2,
