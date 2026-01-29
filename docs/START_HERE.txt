@@ -1,0 +1,41 @@
+===============================================
+   SHEEP GAME - HOW TO START
+===============================================
+
+EASIEST WAY:
+  1. Double-click: start.bat
+  2. Wait for browser to open
+  3. Play!
+
+===============================================
+
+OTHER WAYS:
+
+Option 1: Use Python
+  python server.py
+  
+Option 2: Use Node.js
+  node server.js
+  
+Option 3: Simple Python
+  python -m http.server 8000
+  
+Option 4: Direct Open
+  Double-click index.html
+
+===============================================
+
+Then visit in browser:
+  http://localhost:8000
+
+===============================================
+
+STOP SERVER:
+  Press Ctrl + C in command window
+
+===============================================
+
+NEED HELP?
+  Check: START_SERVER.md
+  
+===============================================

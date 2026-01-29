@@ -1,0 +1,70 @@
+# 操作系统文件
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 编辑器和IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# 日志文件
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 临时文件
+*.tmp
+*.temp
+.cache/
+
+# 备份文件
+*.bak
+*.backup
+*~
+
+# 依赖目录（如果将来添加）
+node_modules/
+bower_components/
+
+# 构建输出（如果将来添加）
+dist/
+build/
+out/
+*.min.js
+*.min.css
+
+# 测试覆盖率报告
+coverage/
+.nyc_output/
+
+# 环境变量文件
+.env
+.env.local
+.env.*.local
+
+# 打包文件
+*.zip
+*.tar.gz
+*.rar
+
+# 音频文件（大文件）
+sounds/*.mp3
+sounds/*.wav
+sounds/*.ogg
+
+# 图片资源（大文件）
+images/*.png
+images/*.jpg
+images/*.gif
+
+# 文档草稿
+*.draft.md
+draft/

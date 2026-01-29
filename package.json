@@ -1,0 +1,33 @@
+{
+  "name": "sheep-game",
+  "version": "2.0.3",
+  "description": "羊了个羊 - 完整实现版。基于HTML5、CSS3和JavaScript的三消游戏，支持金字塔式堆叠、智能分组、100%可解性保证。",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "serve": "python server.py",
+    "dev": "npx live-server --port=8000 --open=index.html",
+    "open": "start index.html"
+  },
+  "keywords": [
+    "game",
+    "sheep",
+    "match-3",
+    "puzzle",
+    "html5",
+    "javascript",
+    "羊了个羊"
+  ],
+  "author": "Sheep Game Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/sheep-game.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-username/sheep-game/issues"
+  },
+  "homepage": "https://github.com/your-username/sheep-game#readme",
+  "devDependencies": {},
+  "dependencies": {}
+}

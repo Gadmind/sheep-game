@@ -1,0 +1,1014 @@
+/* 重置和基础样式 */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    --primary-color: #FF6B8B;
+    --secondary-color: #4ECDC4;
+    --accent-color: #FFD166;
+    --dark-color: #2A2D43;
+    --light-color: #F7F9FC;
+    --success-color: #06D6A0;
+    --danger-color: #EF476F;
+    --warning-color: #FFD166;
+    --shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+    --radius: 12px;
+    --transition: all 0.3s ease;
+}
+
+body {
+    font-family: 'Noto Sans SC', sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    color: var(--dark-color);
+}
+
+.container {
+    width: 100%;
+    max-width: 900px;
+    background-color: var(--light-color);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    position: relative;
+}
+
+/* 胜利庆祝动效画布（覆盖在游戏之上） */
+#celebration-canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    pointer-events: none;          /* 不影响点击操作 */
+    z-index: 11001;                /* 高于弹窗（modal z-index:10000） */
+    opacity: 0;
+    transition: opacity 0.4s ease;
+}
+
+#celebration-canvas.active {
+    opacity: 1;
+}
+
+/* 头部样式 */
+.header {
+    background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+    color: white;
+    padding: 20px 30px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.header h1 {
+    font-family: 'Ma Shan Zheng', cursive;
+    font-size: 2.2rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.stats {
+    display: flex;
+    gap: 20px;
+}
+
+.stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.2);
+    padding: 8px 15px;
+    border-radius: 8px;
+    min-width: 80px;
+}
+
+.stat-label {
+    font-size: 0.9rem;
+    opacity: 0.9;
+}
+
+.stat-value {
+    font-size: 1.5rem;
+    font-weight: bold;
+    transition: var(--transition);
+}
+
+.stat-value.warning {
+    color: var(--warning-color);
+}
+
+.stat-value.danger {
+    color: var(--danger-color);
+    animation: shake 0.5s;
+}
+
+/* 游戏区域 */
+.game-area {
+    padding: 25px;
+    display: flex;
+    flex-direction: column;
+    gap: 25px;
+}
+
+.card-pile {
+    position: relative;
+    height: 600px;  /* 增加高度以适应9行布局 */
+    background-color: #E9ECEF;
+    border-radius: var(--radius);
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.pile-bg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: 
+        radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.8) 2px, transparent 2px),
+        radial-gradient(circle at 70% 70%, rgba(255, 255, 255, 0.6) 1px, transparent 1px),
+        radial-gradient(circle at 40% 80%, rgba(255, 255, 255, 0.7) 1px, transparent 1px);
+    background-size: 50px 50px, 30px 30px, 40px 40px;
+    opacity: 0.5;
+}
+
+/* 卡片样式 - 视觉层次堆叠（二维平铺） */
+.card {
+    position: absolute;
+    /* 宽度和高度由JS动态设置 */
+    border-radius: 8px;
+    cursor: pointer;
+    transition: var(--transition);
+    background-size: cover;
+    background-position: center;
+    border: 3px solid white;
+    /* 阴影由JS根据层数动态设置，实现堆叠效果 */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-weight: bold;
+    /* font-size由JS动态设置 */
+    user-select: none;
+    /* 仅用视觉属性（阴影/透明度）模拟层次，不做几何位移 */
+}
+
+.card:hover {
+    /* 非侵入式高亮：轻微放大 + 发光，不改变层级顺序 */
+    transform: translateY(-3px) scale(1.03);
+    filter: brightness(1.06);
+    box-shadow: 0 0 18px rgba(255, 255, 255, 0.55);
+}
+
+.card.selected {
+    opacity: 0.7;
+    transform: scale(0.95);
+}
+
+.card.hidden {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.card.hidden:hover {
+    transform: none;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* 可点击卡片：高亮展示 */
+.card.card-selectable {
+    filter: none;
+    opacity: 1;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 16px rgba(255, 255, 255, 0.6);
+}
+
+/* 不可点击但仍可见的卡片：置灰处理 */
+.card.card-disabled {
+    cursor: not-allowed;
+    filter: grayscale(0.7) brightness(0.8);
+    opacity: 0.6;
+}
+
+.card.hint {
+    animation: pulse 1.5s infinite;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 15px var(--accent-color);
+}
+
+/* 可见区域遮罩层 */
+.card-visible-mask {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    border-radius: 8px;
+    transition: box-shadow 0.2s ease;
+    z-index: 1;
+}
+
+/* 悬停在可见区域时的效果 */
+.card.hover-visible-region {
+    cursor: pointer;
+}
+
+.card.hover-visible-region .card-visible-mask {
+    animation: visibleRegionPulse 1s ease-in-out infinite;
+}
+
+@keyframes visibleRegionPulse {
+    0%, 100% {
+        box-shadow: 
+            inset 0 0 0 3px rgba(255, 255, 255, 0.9),
+            inset 0 0 12px rgba(255, 255, 255, 0.5),
+            0 0 20px rgba(255, 255, 255, 0.4);
+    }
+    50% {
+        box-shadow: 
+            inset 0 0 0 4px rgba(255, 255, 255, 1),
+            inset 0 0 16px rgba(255, 255, 255, 0.7),
+            0 0 30px rgba(255, 255, 255, 0.6);
+    }
+}
+
+/* 被遮挡区域的视觉反馈 */
+.card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+        135deg,
+        rgba(0, 0, 0, 0.1) 0%,
+        rgba(0, 0, 0, 0.3) 100%
+    );
+    border-radius: 8px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    z-index: 0;
+}
+
+.card.hidden::before {
+    opacity: 1;
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+/* 新增动画 */
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+}
+
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-5px); }
+    75% { transform: translateX(5px); }
+}
+
+/* 卡槽区域 */
+.slot-area {
+    background-color: white;
+    border-radius: var(--radius);
+    padding: 15px;
+    box-shadow: var(--shadow);
+}
+
+.slot-title {
+    font-size: 1.2rem;
+    font-weight: bold;
+    margin-bottom: 10px;
+    color: var(--dark-color);
+    display: flex;
+    justify-content: space-between;
+    padding-bottom: 8px;
+    border-bottom: 2px dashed #eee;
+}
+
+.card-slot {
+    display: flex;
+    gap: 10px;
+    min-height: 100px;
+    padding: 15px;
+    background-color: #F8F9FA;
+    border-radius: 8px;
+    border: 2px dashed #DEE2E6;
+    flex-wrap: wrap;
+    transition: var(--transition);
+}
+
+.card-slot.warning {
+    background-color: #FFF3CD;
+    border-color: var(--warning-color);
+    animation: shake 0.5s;
+}
+
+.card-slot.danger {
+    background-color: #F8D7DA;
+    border-color: var(--danger-color);
+    animation: shake 0.5s;
+}
+
+.slot-card {
+    width: 60px;
+    height: 80px;
+    border-radius: 6px;
+    background-size: cover;
+    background-position: center;
+    border: 2px solid white;
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-weight: bold;
+    font-size: 1.5rem;
+    transition: var(--transition);
+}
+
+.slot-card.matched {
+    animation: match-animation 0.6s forwards;
+}
+
+/* 新添加的卡片高亮效果 */
+.slot-card.new-card {
+    box-shadow: 0 0 15px rgba(255, 107, 139, 0.6);
+    transform: scale(1.05);
+}
+
+/* 相同类型卡片的分组视觉效果 */
+.slot-card.grouped-left {
+    margin-left: -5px;  /* 与左侧卡片靠近 */
+}
+
+.slot-card.grouped-right {
+    margin-right: -5px;  /* 与右侧卡片靠近 */
+}
+
+.slot-card.grouped-left.grouped-right {
+    /* 中间的卡片，两边都靠近 */
+    border-left-width: 1px;
+    border-right-width: 1px;
+}
+
+/* 分组卡片的阴影效果 */
+.slot-card.grouped-left,
+.slot-card.grouped-right {
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+@keyframes match-animation {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.2); opacity: 1; }
+    100% { transform: scale(0); opacity: 0; }
+}
+
+/* 移出区域样式 */
+.removed-area {
+    background-color: white;
+    border-radius: var(--radius);
+    padding: 15px;
+    box-shadow: var(--shadow);
+    margin-top: 15px;
+}
+
+.removed-title {
+    font-size: 1.1rem;
+    font-weight: bold;
+    margin-bottom: 10px;
+    color: var(--dark-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 8px;
+    border-bottom: 2px dashed #eee;
+}
+
+.btn-clear-removed {
+    background-color: var(--danger-color);
+    color: white;
+    border: none;
+    padding: 5px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.btn-clear-removed:hover {
+    background-color: #d63557;
+    transform: translateY(-2px);
+}
+
+.btn-clear-removed:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.removed-slot {
+    display: flex;
+    gap: 10px;
+    min-height: 90px;
+    padding: 15px;
+    background-color: #FFF5F5;
+    border-radius: 8px;
+    border: 2px dashed #FFCDD2;
+    flex-wrap: wrap;
+}
+
+.removed-card {
+    width: 55px;
+    height: 75px;
+    border-radius: 6px;
+    background-size: cover;
+    background-position: center;
+    border: 2px solid #EF476F;
+    box-shadow: 0 3px 6px rgba(239, 71, 111, 0.3);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-weight: bold;
+    font-size: 1.3rem;
+    opacity: 0.8;
+    transition: var(--transition);
+    cursor: pointer;  /* 可点击 */
+    position: relative;
+}
+
+.removed-card:hover {
+    opacity: 1;
+    transform: scale(1.1) translateY(-5px);
+    box-shadow: 0 6px 12px rgba(239, 71, 111, 0.5);
+    border-color: #FF6B8B;
+    z-index: 10;
+}
+
+.removed-card::after {
+    content: '↩';
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    font-size: 0.7rem;
+    opacity: 0.7;
+}
+
+.removed-hint {
+    font-size: 0.85rem;
+    color: #6C757D;
+    margin-bottom: 8px;
+    text-align: center;
+    font-style: italic;
+}
+
+/* 道具栏 */
+.tools-panel {
+    display: flex;
+    justify-content: space-between;
+    padding: 0 25px 25px;
+    gap: 15px;
+}
+
+.tool {
+    flex: 1;
+    background-color: white;
+    border-radius: var(--radius);
+    padding: 15px;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    cursor: pointer;
+    transition: var(--transition);
+    box-shadow: var(--shadow);
+    border: 2px solid transparent;
+}
+
+.tool:hover {
+    transform: translateY(-5px);
+    border-color: var(--primary-color);
+}
+
+.tool.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.tool.disabled:hover {
+    transform: none;
+    border-color: transparent;
+}
+
+.tool-icon {
+    width: 50px;
+    height: 50px;
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    border-radius: 10px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: white;
+    font-size: 1.5rem;
+}
+
+.tool-info {
+    flex: 1;
+}
+
+.tool-name {
+    font-weight: bold;
+    font-size: 1.1rem;
+    margin-bottom: 5px;
+}
+
+.tool-desc {
+    font-size: 0.9rem;
+    color: #6C757D;
+}
+
+.tool-count {
+    font-weight: bold;
+    font-size: 1.5rem;
+    color: var(--primary-color);
+}
+
+/* 难度选择 */
+.difficulty-group {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 12px 25px 0;
+}
+
+.difficulty-label {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--dark-color);
+}
+
+.difficulty-btns {
+    display: flex;
+    gap: 8px;
+}
+
+.difficulty-btn {
+    padding: 10px 20px;
+    border: 2px solid #DEE2E6;
+    border-radius: 10px;
+    background: white;
+    color: var(--dark-color);
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+    font-family: inherit;
+}
+
+.difficulty-btn:hover {
+    border-color: var(--primary-color);
+    background: #F8F9FA;
+    color: var(--primary-color);
+}
+
+.difficulty-btn.active {
+    background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+    color: white;
+    border-color: transparent;
+}
+
+.difficulty-btn.active:hover {
+    opacity: 0.95;
+    color: white;
+}
+
+/* 控制按钮 */
+.controls {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    padding: 12px 25px 25px;
+}
+
+.btn {
+    padding: 12px 25px;
+    border: none;
+    border-radius: 50px;
+    font-family: 'Noto Sans SC', sans-serif;
+    font-size: 1rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+.btn-primary {
+    background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+    color: white;
+}
+
+.btn-primary:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+}
+
+.btn-secondary {
+    background-color: white;
+    color: var(--dark-color);
+    border: 2px solid #DEE2E6;
+}
+
+.btn-secondary:hover {
+    background-color: #F8F9FA;
+    border-color: var(--primary-color);
+}
+
+/* 
+ * Z-INDEX 层级说明：
+ * 1-5000: 卡片层（根据位置动态计算: layer * 1000 + row * 10 + col）
+ * 9000: 消息提示（在卡片之上）
+ * 10000: 模态框（最顶层）
+ */
+
+/* 消息提示 */
+.message {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 15px 25px;
+    background-color: white;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    z-index: 9000;  /* 确保在卡片之上，但在模态框之下 */
+    transform: translateX(150%);
+    transition: transform 0.5s ease;
+}
+
+.message.show {
+    transform: translateX(0);
+}
+
+.message.success {
+    border-left: 5px solid var(--success-color);
+}
+
+.message.error {
+    border-left: 5px solid var(--danger-color);
+}
+
+.message.warning {
+    border-left: 5px solid var(--warning-color);
+}
+
+/* 模态框 */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000;  /* 提高到10000，确保始终在最上层 */
+    opacity: 0;
+    visibility: hidden;
+    transition: var(--transition);
+}
+
+.modal.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+.modal-content {
+    background-color: white;
+    border-radius: var(--radius);
+    width: 90%;
+    max-width: 500px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: var(--shadow);
+    animation: modal-appear 0.3s ease;
+    position: relative;  /* 确保内容在正确的层级上 */
+    z-index: 1;  /* 相对于父元素的层级 */
+}
+
+@keyframes modal-appear {
+    from { transform: scale(0.9); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+
+.modal-header {
+    padding: 20px 25px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #eee;
+}
+
+.modal-header h2 {
+    color: var(--dark-color);
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 1.8rem;
+    cursor: pointer;
+    color: #6C757D;
+    transition: var(--transition);
+}
+
+.modal-close:hover {
+    color: var(--danger-color);
+}
+
+.modal-body {
+    padding: 25px;
+}
+
+.modal-footer {
+    padding: 20px 25px;
+    border-top: 1px solid #eee;
+    display: flex;
+    justify-content: flex-end;
+    gap: 15px;
+}
+
+/* 游戏结果弹窗特定样式 */
+.result-icon {
+    text-align: center;
+    font-size: 4rem;
+    color: var(--accent-color);
+    margin-bottom: 20px;
+}
+
+.result-stats {
+    display: flex;
+    justify-content: space-around;
+    margin-top: 25px;
+    padding-top: 20px;
+    border-top: 1px dashed #eee;
+}
+
+.result-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.result-label {
+    font-size: 0.9rem;
+    color: #6C757D;
+    margin-bottom: 5px;
+}
+
+.result-value {
+    font-size: 1.8rem;
+    font-weight: bold;
+    color: var(--primary-color);
+}
+
+/* 游戏统计样式 */
+.game-stats {
+    margin-top: 25px;
+    padding-top: 20px;
+    border-top: 1px dashed #eee;
+}
+
+.game-stats h4 {
+    text-align: center;
+    margin-bottom: 15px;
+    color: var(--dark-color);
+    font-size: 1.1rem;
+}
+
+.stats-grid {
+    display: flex;
+    justify-content: space-around;
+    gap: 15px;
+}
+
+.stats-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 10px;
+    background-color: #F8F9FA;
+    border-radius: 8px;
+    flex: 1;
+}
+
+.stats-number {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: var(--secondary-color);
+    margin-bottom: 5px;
+}
+
+.stats-text {
+    font-size: 0.85rem;
+    color: #6C757D;
+}
+
+/* 帮助弹窗特定样式 */
+.tool-help-item {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 15px;
+    padding: 10px;
+    background-color: #F8F9FA;
+    border-radius: 8px;
+}
+
+.tool-help-icon {
+    width: 40px;
+    height: 40px;
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    border-radius: 8px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: white;
+    font-size: 1.2rem;
+}
+
+.tool-help-text {
+    flex: 1;
+}
+
+.modal-body h3 {
+    margin-top: 20px;
+    margin-bottom: 10px;
+    color: var(--dark-color);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.modal-body ul {
+    padding-left: 20px;
+    margin-bottom: 20px;
+}
+
+.modal-body li {
+    margin-bottom: 8px;
+    line-height: 1.5;
+}
+
+/* 数据管理样式 */
+.data-management {
+    margin-top: 10px;
+    padding: 15px;
+    background-color: #F8F9FA;
+    border-radius: 8px;
+    text-align: center;
+}
+
+.data-info {
+    margin-bottom: 10px;
+    color: #6C757D;
+    font-size: 0.9rem;
+}
+
+/* 页脚 */
+.footer {
+    margin-top: 20px;
+    text-align: center;
+    color: white;
+    font-size: 0.9rem;
+    opacity: 0.8;
+}
+
+.footer p {
+    margin: 5px 0;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .difficulty-group {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .difficulty-btn {
+        padding: 8px 16px;
+        font-size: 0.9rem;
+    }
+
+    .header {
+        flex-direction: column;
+        gap: 15px;
+        text-align: center;
+    }
+    
+    .stats {
+        width: 100%;
+        justify-content: space-around;
+        flex-wrap: wrap;
+    }
+    
+    .stat {
+        min-width: 70px;
+        padding: 6px 12px;
+    }
+    
+    .stats-grid {
+        flex-direction: column;
+    }
+    
+    .card-pile {
+        height: 450px;  /* 平板尺寸，保持9行布局 */
+    }
+    
+    /* 卡片尺寸由JS自动计算，无需固定设置 */
+    
+    .slot-card {
+        width: 50px;
+        height: 70px;
+        font-size: 1.3rem;
+    }
+    
+    .tools-panel {
+        flex-wrap: wrap;
+    }
+    
+    .tool {
+        min-width: calc(50% - 10px);
+    }
+    
+    .controls {
+        flex-wrap: wrap;
+    }
+    
+    .btn {
+        flex: 1;
+        min-width: 120px;
+    }
+}
+
+@media (max-width: 480px) {
+    .container {
+        padding: 0;
+    }
+    
+    .card-pile {
+        height: 400px;  /* 手机尺寸，保持9行布局 */
+    }
+    
+    /* 卡片尺寸由JS自动计算，无需固定设置 */
+    
+    .tool {
+        min-width: 100%;
+    }
+    
+    .modal-content {
+        width: 95%;
+    }
+}
