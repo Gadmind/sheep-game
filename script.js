@@ -51,6 +51,9 @@ const CONFIG = {
         }
     },
 
+    // 堆叠布局：true = 左右对称布局，false = 原随机金字塔
+    symmetricLayout: true,
+
     // 游戏参数
     initialTools: {
         remove: 3,
@@ -86,6 +89,35 @@ function getEffectiveConfig(settings) {
         return { ...CONFIG };
     }
     return { ...CONFIG, ...diffConfig };
+}
+
+/**
+ * 根据当前日期（及可选难度）生成整数 seed（同一天同一难度下布局固定）
+ * @param {string} [difficulty] - 难度标识，传入则同一天不同难度不同布局
+ * @returns {number}
+ */
+function getDateSeed(difficulty) {
+    const d = new Date();
+    const str = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` + (difficulty ? `-${difficulty}` : '');
+    let h = 0;
+    for (let i = 0; i < str.length; i++) {
+        h = (h * 31 + str.charCodeAt(i)) >>> 0;
+    }
+    return h || 1;
+}
+
+/**
+ * 可复现随机数生成器（mulberry32），相同 seed 得到相同序列
+ * @param {number} seed
+ * @returns {function(): number} 返回 [0, 1) 的随机数
+ */
+function createSeededRandom(seed) {
+    return function () {
+        let t = (seed += 0x6D2B79F5) | 0;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
 }
 
 // 卡片颜色映射（用于替代图片）- 16 种明显区分的颜色
@@ -739,12 +771,24 @@ class SheepGame {
         const cfg = this._effectiveConfig || getEffectiveConfig(this.settings);
         const { layers, rows, cols, cardTypes } = cfg;
 
+        // 以当日日期 + 难度为 seed，同一天同一难度下布局固定
+        const difficulty = (this.settings && this.settings.difficulty) || CONFIG.difficulty;
+        this._deckRandom = createSeededRandom(getDateSeed(difficulty));
+
         // 1. 初始化卡片数组（不再使用三维数组，改用一维数组存储）
         this.state.deck = [];
 
-        // 2. 生成金字塔式位置（支持半格偏移）
-        const allPositions = this.generatePyramidPositions(layers, rows, cols);
+        // 2. 生成金字塔式位置（支持半格偏移）；可选对称布局
+        const useSymmetric = (this.settings && this.settings.symmetricLayout !== undefined)
+            ? this.settings.symmetricLayout
+            : CONFIG.symmetricLayout;
+        const allPositions = useSymmetric
+            ? this.generateSymmetricPyramidPositions(layers, rows, cols)
+            : this.generatePyramidPositions(layers, rows, cols);
         const maxPositions = allPositions.length;
+
+        // 布局已由日期 seed 固定；牌型顺序用 Math.random，每次开局不同
+        this._deckRandom = null;
 
         // 3. 计算目标卡片总数：
         //    - 在 210 到 240 之间
@@ -846,16 +890,16 @@ class SheepGame {
             const layerDensity = 0.6; // 每层密度
             const cardsInLayer = Math.floor(rows * cols * layerDensity);
 
-            // 上层使用偏移位置（金字塔效果）
-            // 底层不偏移，上层有50%概率偏移0.5格
-            const useOffset = layer > 0 && Math.random() > 0.5;
+            // 上层使用偏移位置（金字塔效果）；使用日期 seed 时布局固定
+            const rnd = this._deckRandom || Math.random;
+            const useOffset = layer > 0 && rnd() > 0.5;
             const offset = useOffset ? 0.5 : 0;
 
             for (let i = 0; i < cardsInLayer; i++) {
                 // 随机生成位置（可以有0.5偏移）
                 // 例如：row=1.5 表示在第1格和第2格之间
-                const row = Math.floor(Math.random() * (rows - 1)) + offset;
-                const col = Math.floor(Math.random() * (cols - 1)) + offset;
+                const row = Math.floor(rnd() * (rows - 1)) + offset;
+                const col = Math.floor(rnd() * (cols - 1)) + offset;
 
                 // 检查位置是否已被占用
                 const isDuplicate = positions.some(pos =>
@@ -866,6 +910,54 @@ class SheepGame {
                     positions.push([layer, row, col]);
                 }
             }
+        }
+
+        return positions;
+    }
+
+    /**
+     * 生成对称的金字塔式位置（左右轴对称）
+     * - 每层只从「左半区」采样位置，再镜像到右半区，保证左右对称
+     * - 密度与金字塔 0.5 偏移逻辑与原方法一致，仅分布改为对称
+     * - 扩展：若需上下也对称，可对 row 做同样镜像（四象限对称）
+     */
+    generateSymmetricPyramidPositions(layers, rows, cols) {
+        const positions = [];
+        const midCol = (cols - 1) / 2;
+
+        const rnd = this._deckRandom || Math.random;
+        for (let layer = 0; layer < layers; layer++) {
+            const layerDensity = 0.6;
+            const cardsInLayer = Math.floor(rows * cols * layerDensity);
+            const useOffset = layer > 0 && rnd() > 0.5;
+            const offset = useOffset ? 0.5 : 0;
+
+            // 左半区候选：(layer, row, col) 且 col <= midCol；行/列与金字塔一致支持 0.5 偏移
+            const leftHalf = [];
+            for (let r = 0; r < rows; r++) {
+                const row = r + offset;
+                if (row >= rows) continue; // 避免越界
+                for (let colIndex = 0; colIndex <= midCol; colIndex++) {
+                    const col = colIndex + offset;
+                    if (col > midCol) continue;
+                    leftHalf.push([layer, row, col]);
+                }
+            }
+
+            this.shuffleArray(leftHalf);
+
+            const layerPositions = [];
+            for (const pos of leftHalf) {
+                if (layerPositions.length >= cardsInLayer) break;
+                const [l, row, col] = pos;
+                const mirrorCol = cols - 1 - col;
+                layerPositions.push([l, row, col]);
+                if (col !== mirrorCol && layerPositions.length < cardsInLayer) {
+                    layerPositions.push([l, row, mirrorCol]);
+                }
+            }
+            // 严格每层 cardsInLayer 个（多则截断）
+            positions.push(...layerPositions.slice(0, cardsInLayer));
         }
 
         return positions;
@@ -1483,10 +1575,11 @@ class SheepGame {
         return this.state.deck.find(card => card && card.id === id);
     }
 
-    // 洗牌算法
+    // 洗牌算法（布局生成时使用日期 seed 的随机器，否则用 Math.random）
     shuffleArray(array) {
+        const rnd = this._deckRandom || Math.random;
         for (let i = array.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
+            const j = Math.floor(rnd() * (i + 1));
             [array[i], array[j]] = [array[j], array[i]];
         }
         return array;
@@ -1581,9 +1674,14 @@ class SheepGame {
         const layerOffset = 3; // 每层的偏移量
         const maxLayers = cfg.layers || 4;
 
+        // 堆叠时每层视觉偏移（px），用于露出下层卡片边缘
+        const stackOffsetPerLayer = 3;
+        // 为「第 9.5 行」和底部堆叠预留的垂直空间（估算），使 displayHeight 不超出容器
+        const extraVerticalReserve = 0.5 * (55 + 5) + (maxLayers - 1) * stackOffsetPerLayer;
+
         // 可用空间
         const availableWidth = containerWidth - paddingX - (maxLayers * layerOffset);
-        const availableHeight = containerHeight - paddingY - (maxLayers * layerOffset);
+        const availableHeight = containerHeight - paddingY - (maxLayers * layerOffset) - extraVerticalReserve;
 
         // 计算卡片尺寸（考虑间距）
         const gapX = 5; // 水平间距
@@ -1600,7 +1698,11 @@ class SheepGame {
         const gridWidth = finalCardWidth * GRID_COLS + gapX * (GRID_COLS - 1);
         const gridHeight = finalCardHeight * GRID_ROWS + gapY * (GRID_ROWS - 1);
         const startX = (containerWidth - gridWidth) / 2;
-        const startY = (containerHeight - gridHeight) / 2;
+        // 垂直方向预留「半行」+ 底部堆叠偏移，使 row=8.5 的卡片完整显示
+        const halfRowHeight = 0.5 * (finalCardHeight + gapY);
+        const bottomStackOffset = (maxLayers - 1) * stackOffsetPerLayer;
+        const displayHeight = gridHeight + halfRowHeight + bottomStackOffset;
+        const startY = (containerHeight - displayHeight) / 2;
 
         return {
             cardWidth: finalCardWidth,
@@ -1609,7 +1711,8 @@ class SheepGame {
             gapY,
             startX,
             startY,
-            layerOffset
+            layerOffset,
+            stackOffsetPerLayer
         };
     }
 
@@ -1640,10 +1743,10 @@ class SheepGame {
         // 获取自适应布局参数
         const layout = this.calculateCardLayout();
 
-        // 计算卡片在7x9网格中的位置（所有卡片都是1×1）
-        // 注意：这里不再根据 layer 做几何偏移，所有卡片保持“平铺”在同一二维网格上
-        const x = layout.startX + card.col * (layout.cardWidth + layout.gapX);
-        const y = layout.startY + card.row * (layout.cardHeight + layout.gapY);
+        // 计算卡片在网格中的位置；同格堆叠时按 layer 做视觉偏移，露出下层边缘
+        const stackOffset = layout.stackOffsetPerLayer ?? layout.layerOffset ?? 3;
+        const x = layout.startX + card.col * (layout.cardWidth + layout.gapX) + card.layer * stackOffset;
+        const y = layout.startY + card.row * (layout.cardHeight + layout.gapY) + card.layer * stackOffset;
 
         // 基于 z（层级优先级）只做“视觉”上的层次区分，而不是位置偏移
         // 层级越高：阴影更明显、不透明度更高，形成视觉上的“更靠上”
@@ -1721,12 +1824,7 @@ class SheepGame {
         maskEl.style.clipPath = clipPath;
         maskEl.style.webkitClipPath = clipPath;
 
-        // 添加边缘高光效果
-        maskEl.style.boxShadow = `
-            inset 0 0 0 2px rgba(255, 255, 255, 0.6),
-            inset 0 0 8px rgba(255, 255, 255, 0.3)
-        `;
-
+        // 不再添加 inset 白边/内发光，避免左上/右上角出现条状样式
         cardEl.appendChild(maskEl);
 
         // 存储遮罩元素引用
@@ -1744,6 +1842,7 @@ class SheepGame {
 
         // 将归一化坐标转换为百分比（相对于卡片本身）
         // 由于卡片在网格中，region的坐标是相对于网格的，需要转换为相对于卡片的百分比
+        const minSize = 4; // 过滤掉宽度或高度不足 4% 的细条，避免角上出现条状样式
         const polygons = visibleRegions.map(region => {
             // 计算区域在卡片内的相对位置（百分比）
             // 假设卡片占据一个网格单位，region的坐标是相对于网格的
@@ -1752,10 +1851,9 @@ class SheepGame {
             const x2 = Math.max(0, Math.min(100, ((region.x + region.width) % 1) * 100));
             const y2 = Math.max(0, Math.min(100, ((region.y + region.height) % 1) * 100));
 
-            // 确保坐标有效
-            if (x2 <= x1 || y2 <= y1) {
-                return null;
-            }
+            // 确保坐标有效且不是过窄/过扁的细条
+            if (x2 <= x1 || y2 <= y1) return null;
+            if (x2 - x1 < minSize || y2 - y1 < minSize) return null;
 
             return `polygon(${x1}% ${y1}%, ${x2}% ${y1}%, ${x2}% ${y2}%, ${x1}% ${y2}%)`;
         }).filter(p => p !== null);
@@ -1787,23 +1885,16 @@ class SheepGame {
             card.visibleRegions
         );
 
-        // 更新视觉反馈
+        // 更新视觉反馈（仅外发光，无 inset 白边，避免角上条状样式）
         if (isInVisibleRegion) {
             cardEl.classList.add('hover-visible-region');
             if (cardEl._maskEl) {
-                cardEl._maskEl.style.boxShadow = `
-                    inset 0 0 0 3px rgba(255, 255, 255, 0.9),
-                    inset 0 0 12px rgba(255, 255, 255, 0.5),
-                    0 0 20px rgba(255, 255, 255, 0.4)
-                `;
+                cardEl._maskEl.style.boxShadow = '0 0 20px rgba(255, 255, 255, 0.4)';
             }
         } else {
             cardEl.classList.remove('hover-visible-region');
             if (cardEl._maskEl) {
-                cardEl._maskEl.style.boxShadow = `
-                    inset 0 0 0 2px rgba(255, 255, 255, 0.6),
-                    inset 0 0 8px rgba(255, 255, 255, 0.3)
-                `;
+                cardEl._maskEl.style.boxShadow = 'none';
             }
         }
     }
@@ -1814,10 +1905,7 @@ class SheepGame {
     handleCardLeave(cardEl, card) {
         cardEl.classList.remove('hover-visible-region');
         if (cardEl._maskEl) {
-            cardEl._maskEl.style.boxShadow = `
-                inset 0 0 0 2px rgba(255, 255, 255, 0.6),
-                inset 0 0 8px rgba(255, 255, 255, 0.3)
-            `;
+            cardEl._maskEl.style.boxShadow = 'none';
         }
     }
 
