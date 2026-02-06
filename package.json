@@ -29,5 +29,5 @@
   },
   "homepage": "https://github.com/your-username/sheep-game#readme",
   "devDependencies": {},
-  "dependencies": {}
+  "dependencies": { "socket.io": "^4.5.4" }
 }

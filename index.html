@@ -3,282 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>羊了个羊 - 完整实现版</title>
-    <link rel="stylesheet" href="style.css">
+    <title>游戏大厅</title>
+    <link rel="stylesheet" href="selection.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Sans+SC:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="container">
-        <!-- 标题和状态栏 -->
-        <header class="header">
-            <h1><i class="fas fa-sheep"></i> 羊了个羊</h1>
-            <div class="stats">
-                <div class="stat">
-                    <span class="stat-label">分数</span>
-                    <span id="score" class="stat-value">0</span>
-                </div>
-                <div class="stat">
-                    <span class="stat-label">最高分</span>
-                    <span id="high-score" class="stat-value">0</span>
-                </div>
-                <div class="stat">
-                    <span class="stat-label">步数</span>
-                    <span id="moves" class="stat-value">0</span>
-                </div>
-                <div class="stat">
-                    <span class="stat-label">槽位</span>
-                    <span id="slot-count" class="stat-value">0/7</span>
-                </div>
-            </div>
-        </header>
-
-        <!-- 游戏区域 -->
-        <main class="game-area">
-            <!-- 牌堆区域 -->
-            <div id="card-pile" class="card-pile">
-                <div class="pile-bg"></div>
-                <!-- 卡片将通过JS动态生成 -->
-            </div>
-            
-            <!-- 卡槽区域 -->
-            <div class="slot-area">
-                <div class="slot-title">卡槽 <span id="slot-fill">0/7</span></div>
-                <div id="card-slot" class="card-slot">
-                    <!-- 已选择的卡片将显示在这里 -->
-                </div>
-            </div>
-            
-            <!-- 移出区域 -->
-            <div class="removed-area">
-                <div class="removed-title">
-                    移出区 <span id="removed-count">0</span>
-                    <button id="btn-clear-removed" class="btn-clear-removed" title="清空移出区">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </div>
-                <div class="removed-hint">点击卡片可移回卡槽</div>
-                <div id="removed-slot" class="removed-slot">
-                    <!-- 移出的卡片将显示在这里 -->
-                </div>
-            </div>
-        </main>
-
-        <!-- 道具栏 -->
-        <div class="tools-panel">
-            <div class="tool" id="tool-remove">
-                <div class="tool-icon">
-                    <i class="fas fa-trash-arrow-up"></i>
-                </div>
-                <div class="tool-info">
-                    <div class="tool-name">移出</div>
-                    <div class="tool-desc">移出前3张到移出区（可叠加，点击移回）</div>
-                </div>
-                <div class="tool-count">3</div>
-            </div>
-            
-            <div class="tool" id="tool-undo">
-                <div class="tool-icon">
-                    <i class="fas fa-rotate-left"></i>
-                </div>
-                <div class="tool-info">
-                    <div class="tool-name">撤销</div>
-                    <div class="tool-desc">回退上一步</div>
-                </div>
-                <div class="tool-count">3</div>
-            </div>
-            
-            <div class="tool" id="tool-shuffle">
-                <div class="tool-icon">
-                    <i class="fas fa-shuffle"></i>
-                </div>
-                <div class="tool-info">
-                    <div class="tool-name">洗牌</div>
-                    <div class="tool-desc">重排可见牌</div>
-                </div>
-                <div class="tool-count">1</div>
-            </div>
-            
-            <div class="tool" id="tool-hint">
-                <div class="tool-icon">
-                    <i class="fas fa-lightbulb"></i>
-                </div>
-                <div class="tool-info">
-                    <div class="tool-name">提示</div>
-                    <div class="tool-desc">高亮可消牌</div>
-                </div>
-                <div class="tool-count">3</div>
-            </div>
+    <div class="selection-container">
+        <h1><i class="fas fa-gamepad"></i> 游戏大厅</h1>
+        <p class="subtitle">选择一款游戏开始</p>
+        <div class="game-cards">
+            <a href="sheep.html" class="game-card sheep">
+                <span class="game-card-icon"><i class="fas fa-sheep"></i></span>
+                <h2>羊了个羊</h2>
+                <p>三消消除，金字塔堆叠，挑战你的策略与运气</p>
+            </a>
+            <a href="gomoku.html" class="game-card gomoku">
+                <span class="game-card-icon"><i class="fas fa-chess-board"></i></span>
+                <h2>五子棋</h2>
+                <p>人机对战或联机对战，支持悔棋与认输</p>
+            </a>
         </div>
-
-        <!-- 难度选择 -->
-        <div class="difficulty-group">
-            <span class="difficulty-label">难度</span>
-            <div class="difficulty-btns">
-                <button type="button" class="difficulty-btn" data-difficulty="easy">简单</button>
-                <button type="button" class="difficulty-btn" data-difficulty="normal">普通</button>
-                <button type="button" class="difficulty-btn" data-difficulty="hard">困难</button>
-            </div>
-        </div>
-
-        <!-- 控制按钮 -->
-        <div class="controls">
-            <button id="btn-new-game" class="btn btn-primary">
-                <i class="fas fa-play"></i> 新游戏
-            </button>
-            <button id="btn-reset" class="btn btn-secondary">
-                <i class="fas fa-redo"></i> 重置
-            </button>
-            <button id="btn-sound" class="btn btn-secondary">
-                <i class="fas fa-volume-up"></i> <span>音效</span>
-            </button>
-            <button id="btn-help" class="btn btn-secondary">
-                <i class="fas fa-question-circle"></i> 帮助
-            </button>
-            <button id="btn-celebration-text" class="btn btn-secondary">
-                <i class="fas fa-heart"></i> 庆祝文案
-            </button>
-        </div>
-
-        <!-- 游戏状态提示 -->
-        <div id="message" class="message"></div>
-        
-        <!-- 游戏结束弹窗 -->
-        <div id="game-over-modal" class="modal">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h2 id="game-result-title">游戏结束</h2>
-                    <button class="modal-close">&times;</button>
-                </div>
-                <div class="modal-body">
-                    <div id="game-result-icon" class="result-icon">
-                        <i class="fas fa-trophy"></i>
-                    </div>
-                    <p id="game-result-text">你成功消除了所有卡片！</p>
-                    <div class="result-stats">
-                        <div class="result-stat">
-                            <span class="result-label">分数</span>
-                            <span id="final-score" class="result-value">0</span>
-                        </div>
-                        <div class="result-stat">
-                            <span class="result-label">步数</span>
-                            <span id="final-moves" class="result-value">0</span>
-                        </div>
-                        <div class="result-stat">
-                            <span class="result-label">用时</span>
-                            <span id="final-time" class="result-value">0s</span>
-                        </div>
-                    </div>
-                    <div class="game-stats">
-                        <h4>📊 游戏统计</h4>
-                        <div class="stats-grid">
-                            <div class="stats-item">
-                                <span class="stats-number" id="total-games">0</span>
-                                <span class="stats-text">总场次</span>
-                            </div>
-                            <div class="stats-item">
-                                <span class="stats-number" id="win-rate">0%</span>
-                                <span class="stats-text">胜率</span>
-                            </div>
-                            <div class="stats-item">
-                                <span class="stats-number" id="best-score">0</span>
-                                <span class="stats-text">最高分</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button id="btn-play-again" class="btn btn-primary">再玩一次</button>
-                    <button id="btn-share" class="btn btn-secondary">
-                        <i class="fas fa-share"></i> 分享战绩
-                    </button>
-                </div>
-            </div>
-        </div>
-        
-        <!-- 帮助弹窗 -->
-        <div id="help-modal" class="modal">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h2>游戏规则</h2>
-                    <button class="modal-close">&times;</button>
-                </div>
-                <div class="modal-body">
-                    <h3><i class="fas fa-gamepad"></i> 如何玩</h3>
-                    <ul>
-                        <li>点击上方的卡片，它们会移动到下方卡槽</li>
-                        <li>当卡槽中出现3张相同的卡片时，它们会自动消除</li>
-                        <li>如果卡槽被填满（7张不同的牌），游戏结束</li>
-                        <li>消除所有卡片即可获胜</li>
-                    </ul>
-                    
-                    <h3><i class="fas fa-layer-group"></i> 金字塔堆叠</h3>
-                    <ul>
-                        <li>上层卡片可以压在多张下层卡片的交界处</li>
-                        <li>只有最上面的可见卡片才能点击（灰色卡片不可点击）</li>
-                        <li>移除上层卡片后，下方被压住的卡片会显示出来</li>
-                        <li>相同类型的卡片会自动聚集在卡槽中</li>
-                    </ul>
-                    
-                    <h3><i class="fas fa-toolbox"></i> 道具说明</h3>
-                    <div class="tool-help">
-                        <div class="tool-help-item">
-                            <div class="tool-help-icon"><i class="fas fa-trash-arrow-up"></i></div>
-                            <div class="tool-help-text">
-                                <strong>移出</strong>：将卡槽前三张牌移到移出区暂存，支持叠加，点击移出区卡片可移回卡槽
-                            </div>
-                        </div>
-                        <div class="tool-help-item">
-                            <div class="tool-help-icon"><i class="fas fa-rotate-left"></i></div>
-                            <div class="tool-help-text">
-                                <strong>撤销</strong>：撤销最后一步操作
-                            </div>
-                        </div>
-                        <div class="tool-help-item">
-                            <div class="tool-help-icon"><i class="fas fa-shuffle"></i></div>
-                            <div class="tool-help-text">
-                                <strong>洗牌</strong>：重新排列当前可见的卡片
-                            </div>
-                        </div>
-                        <div class="tool-help-item">
-                            <div class="tool-help-icon"><i class="fas fa-lightbulb"></i></div>
-                            <div class="tool-help-text">
-                                <strong>提示</strong>：高亮显示可以消除的卡片
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <h3><i class="fas fa-tips"></i> 游戏技巧</h3>
-                    <ul>
-                        <li>优先消除上层卡片，让下层卡片露出来</li>
-                        <li>注意观察卡片堆叠情况，规划消除顺序</li>
-                        <li>不要急于填满卡槽，留出空间应对意外</li>
-                        <li>合理使用道具，它们能帮你度过难关</li>
-                    </ul>
-                    
-                    <h3><i class="fas fa-cog"></i> 数据管理</h3>
-                    <div class="data-management">
-                        <p class="data-info">游戏数据已自动保存在本地</p>
-                        <button id="btn-clear-data" class="btn btn-secondary">
-                            <i class="fas fa-trash"></i> 清除所有数据
-                        </button>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button class="btn btn-primary close-help">开始游戏</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- 胜利庆祝动效画布（烟花 + 爱心） -->
-        <canvas id="celebration-canvas"></canvas>
     </div>
-
-    <footer class="footer">
-        <p>《羊了个羊》实现版 - 仅供学习使用</p>
-        <p>基于HTML5、CSS3和JavaScript实现</p>
+    <footer class="selection-footer">
+        <p>基于 HTML5、CSS3 和 JavaScript 实现</p>
     </footer>
-
-    <script src="script.js"></script>
 </body>
 </html>

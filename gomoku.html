@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>五子棋</title>
+    <link rel="stylesheet" href="gomoku.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="gomoku-container">
+        <header class="gomoku-header">
+            <a href="index.html" class="back-link"><i class="fas fa-arrow-left"></i> 返回游戏选择</a>
+            <h1><i class="fas fa-chess-board"></i> 五子棋</h1>
+        </header>
+
+        <!-- 模式与设置（未开始时显示） -->
+        <div id="setup-panel" class="setup-panel">
+            <div class="mode-group">
+                <span class="mode-label">模式</span>
+                <div class="mode-btns">
+                    <button type="button" class="mode-btn active" data-mode="ai">人机对战</button>
+                    <button type="button" class="mode-btn" data-mode="online">联机对战</button>
+                </div>
+            </div>
+            <div id="ai-difficulty-group" class="difficulty-group">
+                <span class="difficulty-label">难度</span>
+                <div class="difficulty-btns">
+                    <button type="button" class="difficulty-btn active" data-difficulty="easy">简单</button>
+                    <button type="button" class="difficulty-btn" data-difficulty="medium">中等</button>
+                    <button type="button" class="difficulty-btn" data-difficulty="hard">困难</button>
+                </div>
+            </div>
+            <div id="online-setup" class="online-setup" style="display:none;">
+                <div class="room-actions">
+                    <button type="button" id="btn-create-room" class="btn btn-primary"><i class="fas fa-plus"></i> 创建房间</button>
+                    <div class="join-row">
+                        <input type="text" id="room-id-input" placeholder="输入房间号" maxlength="8">
+                        <button type="button" id="btn-join-room" class="btn btn-secondary">加入房间</button>
+                    </div>
+                </div>
+                <div id="room-info" class="room-info" style="display:none;">
+                    <p>房间号：<strong id="display-room-id"></strong></p>
+                    <p id="room-status">等待对手加入...</p>
+                </div>
+            </div>
+            <div id="ai-color-group" class="color-group">
+                <span class="color-label">先后手</span>
+                <div class="color-btns">
+                    <button type="button" class="color-btn active" data-color="black">黑子（先手）</button>
+                    <button type="button" class="color-btn" data-color="white">白子（后手）</button>
+                </div>
+            </div>
+            <button type="button" id="btn-start-ai" class="btn btn-primary btn-start"><i class="fas fa-play"></i> 开始游戏</button>
+        </div>
+
+        <!-- 游戏主区域（开始后显示） -->
+        <div id="game-panel" class="game-panel" style="display:none;">
+            <div class="status-bar">
+                <span id="game-status" class="game-status">黑方落子</span>
+                <span id="turn-indicator" class="turn-indicator"></span>
+            </div>
+            <div class="board-wrap">
+                <canvas id="gomoku-board" width="450" height="450"></canvas>
+            </div>
+            <div class="action-btns">
+                <button type="button" id="btn-undo" class="btn btn-secondary"><i class="fas fa-rotate-left"></i> 悔棋</button>
+                <button type="button" id="btn-resign" class="btn btn-danger"><i class="fas fa-flag"></i> 认输</button>
+                <button type="button" id="btn-back-lobby" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> 返回大厅</button>
+            </div>
+        </div>
+
+        <!-- 联机悔棋确认弹窗 -->
+        <div id="undo-request-modal" class="modal" style="display:none;">
+            <div class="modal-content modal-sm">
+                <div class="modal-header">
+                    <h2>悔棋请求</h2>
+                </div>
+                <div class="modal-body">
+                    <p>对方请求悔棋，是否同意？</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" id="undo-accept" class="btn btn-primary">同意</button>
+                    <button type="button" id="undo-reject" class="btn btn-secondary">拒绝</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 游戏结束弹窗 -->
+        <div id="game-over-modal" class="modal" style="display:none;">
+            <div class="modal-content modal-sm">
+                <div class="modal-header">
+                    <h2 id="game-over-title">游戏结束</h2>
+                </div>
+                <div class="modal-body">
+                    <p id="game-over-text"></p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" id="btn-game-over-ok" class="btn btn-primary">确定</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="gomoku.js"></script>
+</body>
+</html>

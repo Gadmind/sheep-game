@@ -1,0 +1,106 @@
+/* 游戏选择页样式 */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    --primary-color: #FF6B8B;
+    --secondary-color: #4ECDC4;
+    --accent-color: #FFD166;
+    --dark-color: #2A2D43;
+    --light-color: #F7F9FC;
+    --shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+    --radius: 12px;
+    --transition: all 0.3s ease;
+}
+
+body {
+    font-family: 'Noto Sans SC', sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    color: var(--dark-color);
+}
+
+.selection-container {
+    width: 100%;
+    max-width: 700px;
+    text-align: center;
+}
+
+.selection-container h1 {
+    font-size: 2.5rem;
+    color: white;
+    margin-bottom: 0.5rem;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.selection-container .subtitle {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 1rem;
+    margin-bottom: 2.5rem;
+}
+
+.game-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    align-items: center;
+}
+
+.game-card {
+    display: block;
+    width: 100%;
+    max-width: 400px;
+    background: var(--light-color);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 2rem;
+    text-decoration: none;
+    color: var(--dark-color);
+    transition: var(--transition);
+    border: 3px solid transparent;
+}
+
+.game-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
+    border-color: var(--primary-color);
+}
+
+.game-card:active {
+    transform: translateY(-2px);
+}
+
+.game-card-icon {
+    font-size: 3.5rem;
+    margin-bottom: 1rem;
+    display: block;
+}
+
+.game-card h2 {
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+    color: var(--dark-color);
+}
+
+.game-card p {
+    font-size: 0.95rem;
+    color: #666;
+    line-height: 1.5;
+}
+
+.game-card.sheep .game-card-icon { color: #4ECDC4; }
+.game-card.gomoku .game-card-icon { color: #2A2D43; }
+
+footer.selection-footer {
+    margin-top: 2.5rem;
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 0.9rem;
+}
