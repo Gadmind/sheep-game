@@ -23,12 +23,21 @@
     let myColor = null;
     let roomId = null;
     let socket = null;
+    let isSpectator = false;
+    let isWaitingForOpponent = false;
     let pendingUndoRequest = false;
+    let aiThinking = false;      // AI 计算中，用于显示「AI 思考中」提示
+    let onlineMovePending = false; // 联机落子已发送，等待服务器确认，防止重复点击
 
     let canvas, ctx;
 
+    /** Web Worker 用于 AI 计算，避免阻塞主线程 */
+    let aiWorker = null;
+    let aiWorkerTaskId = 0;
+    let aiWorkerResolve = null;
+
     const $ = (id) => document.getElementById(id);
-    const show = (el) => { el.style.display = ''; };
+    const show = (el) => { if (el) el.style.display = ''; };
     const hide = (el) => { el.style.display = 'none'; };
 
     function initBoard() {
@@ -38,29 +47,36 @@
         gameOver = false;
         winner = null;
         pendingUndoRequest = false;
+        aiThinking = false;
+        onlineMovePending = false;
     }
 
     function checkWin(r, c, color) {
+        return getWinLine(r, c, color) !== null;
+    }
+
+    /** 获取五连的棋子坐标，若无则返回 null */
+    function getWinLine(r, c, color) {
         const dr = [0, 1, 1, 1];
         const dc = [1, 0, 1, -1];
         for (let d = 0; d < 4; d++) {
-            let count = 1;
+            const line = [{ r, c }];
             let nr = r + dr[d], nc = c + dc[d];
             while (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE && board[nr][nc] === color) {
-                count++;
+                line.push({ r: nr, c: nc });
                 nr += dr[d];
                 nc += dc[d];
             }
             nr = r - dr[d];
             nc = c - dc[d];
             while (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE && board[nr][nc] === color) {
-                count++;
+                line.unshift({ r: nr, c: nc });
                 nr -= dr[d];
                 nc -= dc[d];
             }
-            if (count >= 5) return true;
+            if (line.length >= 5) return line.slice(0, 5);
         }
-        return false;
+        return null;
     }
 
     function isDraw() {
@@ -542,6 +558,54 @@
         return getFallbackMove();
     }
 
+    /** 初始化 AI Worker（纯浏览器实现，不使用 Node.js） */
+    function initAIWorker() {
+        if (typeof Worker === 'undefined') return false;
+        try {
+            const workerUrl = new URL('gomoku-ai-worker.js', window.location.href).href;
+            aiWorker = new Worker(workerUrl);
+            aiWorker.onmessage = function (e) {
+                const { taskId, move, error } = e.data;
+                if (taskId === aiWorkerTaskId && aiWorkerResolve) {
+                    aiWorkerResolve(move || getFallbackMove());
+                    aiWorkerResolve = null;
+                }
+            };
+            aiWorker.onerror = function () {
+                aiWorker = null;
+                if (aiWorkerResolve) {
+                    aiWorkerResolve(getAIMove());
+                    aiWorkerResolve = null;
+                }
+            };
+            return true;
+        } catch (e) {
+            console.warn('AI Worker init failed, using main thread:', e);
+            return false;
+        }
+    }
+
+    /** 通过 Worker 异步获取 AI 落子，失败则回退到主线程同步计算 */
+    function getAIMoveAsync() {
+        return new Promise(function (resolve) {
+            if (!aiWorker) {
+                if (!initAIWorker()) {
+                    resolve(getAIMove());
+                    return;
+                }
+            }
+            const taskId = ++aiWorkerTaskId;
+            aiWorkerResolve = resolve;
+            const aiColor = currentTurn;
+            aiWorker.postMessage({
+                board: board.map(r => r.slice()),
+                difficulty: difficulty,
+                aiColor: aiColor,
+                taskId: taskId
+            });
+        });
+    }
+
     // ----- Canvas -----
     function drawBoard() {
         if (!ctx) return;
@@ -572,11 +636,17 @@
     function drawStones() {
         if (!ctx) return;
         const lastMove = moveHistory.length > 0 ? moveHistory[moveHistory.length - 1] : null;
+        let winLine = null;
+        if (gameOver && winner && winner !== 'draw' && lastMove && lastMove.color === winner) {
+            winLine = getWinLine(lastMove.r, lastMove.c, winner);
+        }
+        const winSet = winLine ? new Set(winLine.map(p => p.r * BOARD_SIZE + p.c)) : null;
         for (let i = 0; i < BOARD_SIZE; i++) {
             for (let j = 0; j < BOARD_SIZE; j++) {
                 if (board[i][j] === EMPTY) continue;
                 const x = PADDING + j * CELL;
                 const y = PADDING + i * CELL;
+                const isWinStone = winSet && winSet.has(i * BOARD_SIZE + j);
                 const grad = ctx.createRadialGradient(x - 4, y - 4, 0, x, y, CELL / 2);
                 if (board[i][j] === BLACK) {
                     grad.addColorStop(0, '#444');
@@ -593,8 +663,13 @@
                 ctx.lineWidth = 1;
                 ctx.stroke();
 
-                // 绘制最后落子的标记（红点）
-                if (lastMove && lastMove.r === i && lastMove.c === j) {
+                if (isWinStone) {
+                    ctx.strokeStyle = '#e74c3c';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(x, y, CELL / 2 - 1, 0, Math.PI * 2);
+                    ctx.stroke();
+                } else if (lastMove && lastMove.r === i && lastMove.c === j) {
                     ctx.fillStyle = '#ff0000';
                     ctx.beginPath();
                     ctx.arc(x, y, 3, 0, Math.PI * 2);
@@ -620,14 +695,24 @@
         return null;
     }
 
+    function updateActionButtons() {
+        const undoBtn = $('btn-undo');
+        const resignBtn = $('btn-resign');
+        if (undoBtn) undoBtn.disabled = gameOver;
+        if (resignBtn) resignBtn.disabled = gameOver;
+    }
+
     function updateStatus() {
         const statusEl = $('game-status');
         const turnEl = $('turn-indicator');
+        updateActionButtons();
         if (gameOver) {
             turnEl.className = 'turn-indicator';
             if (winner === 'draw') statusEl.textContent = '游戏结束：和棋';
-            else if (mode === 'online') {
+            else if (mode === 'online' && !isSpectator) {
                 statusEl.textContent = winner === myColor ? '恭喜！你赢了！' : '很遗憾，你输了';
+            } else if (mode === 'online' && isSpectator) {
+                statusEl.textContent = '对局结束';
             }
             else if (winner === BLACK) statusEl.textContent = '游戏结束：黑方胜';
             else statusEl.textContent = '游戏结束：白方胜';
@@ -638,7 +723,13 @@
         turnEl.className = 'turn-indicator ' + (currentTurn === BLACK ? 'black' : 'white');
         
         if (mode === 'online') {
-            if (isMyTurn) {
+            if (isWaitingForOpponent) {
+                statusEl.textContent = '等待对手加入...';
+                statusEl.style.color = '#7f8c8d';
+            } else if (isSpectator) {
+                statusEl.textContent = '观战中 · ' + (currentTurn === BLACK ? '黑方落子' : '白方落子');
+                statusEl.style.color = '#7f8c8d';
+            } else if (isMyTurn) {
                 statusEl.textContent = '轮到你了';
                 statusEl.style.color = '#e67e22';
             } else {
@@ -646,8 +737,13 @@
                 statusEl.style.color = '#7f8c8d';
             }
         } else {
-            statusEl.textContent = currentTurn === BLACK ? '黑方落子' : '白方落子';
-            statusEl.style.color = '';
+            if (aiThinking) {
+                statusEl.textContent = 'AI 思考中...';
+                statusEl.style.color = '#7f8c8d';
+            } else {
+                statusEl.textContent = currentTurn === BLACK ? '黑方落子' : '白方落子';
+                statusEl.style.color = '';
+            }
         }
     }
 
@@ -663,6 +759,9 @@
 
     function canPlayerMove() {
         if (gameOver) return false;
+        if (isSpectator) return false;
+        if (mode === 'online' && isWaitingForOpponent) return false;
+        if (mode === 'online' && onlineMovePending) return false;
         if (mode === 'ai') return currentTurn === playerColorPreference;
         if (mode === 'online') return myColor === currentTurn;
         return false;
@@ -672,72 +771,126 @@
         if (gameOver) return;
         const aiColor = playerColorPreference === BLACK ? WHITE : BLACK;
         currentTurn = aiColor;
-        try {
-            let move = getAIMove();
-            if (!move || typeof move.r !== 'number' || typeof move.c !== 'number') {
-                move = getFallbackMove();
-            }
-            if (!move) {
-                currentTurn = playerColorPreference;
-                return;
-            }
-            let r = move.r, c = move.c;
-            if (r < 0 || r >= BOARD_SIZE || c < 0 || c >= BOARD_SIZE || board[r][c] !== EMPTY) {
-                move = getFallbackMove();
+        aiThinking = true;
+        updateStatus();
+        getAIMoveAsync().then(function (move) {
+            aiThinking = false;
+            if (gameOver) return;
+            try {
+                if (!move || typeof move.r !== 'number' || typeof move.c !== 'number') {
+                    move = getFallbackMove();
+                }
                 if (!move) {
                     currentTurn = playerColorPreference;
                     return;
                 }
-                r = move.r;
-                c = move.c;
-            }
-            if (!placeStone(r, c, aiColor)) {
-                move = getFallbackMove();
-                if (move) placeStone(move.r, move.c, aiColor);
-            }
-            if (canvas && !ctx && canvas.getContext) ctx = canvas.getContext('2d');
-            render();
-            updateStatus();
-            if (gameOver) {
-                if (winner === aiColor) showGameOver('AI 获胜');
-                else if (winner === 'draw') showGameOver('和棋');
-            }
-        } catch (e) {
-            console.warn('doAIMove error:', e);
-            try {
-                currentTurn = aiColor;
-                const fallback = getFallbackMove();
-                if (fallback && placeStone(fallback.r, fallback.c, aiColor)) {
-                    if (canvas && !ctx && canvas.getContext) ctx = canvas.getContext('2d');
-                    render();
-                    updateStatus();
-                } else {
+                let r = move.r, c = move.c;
+                if (r < 0 || r >= BOARD_SIZE || c < 0 || c >= BOARD_SIZE || board[r][c] !== EMPTY) {
+                    move = getFallbackMove();
+                    if (!move) {
+                        currentTurn = playerColorPreference;
+                        return;
+                    }
+                    r = move.r;
+                    c = move.c;
+                }
+                if (!placeStone(r, c, aiColor)) {
+                    move = getFallbackMove();
+                    if (move) placeStone(move.r, move.c, aiColor);
+                }
+                if (canvas && !ctx && canvas.getContext) ctx = canvas.getContext('2d');
+                render();
+                updateStatus();
+                if (gameOver) {
+                    if (winner === aiColor) showGameOver('AI 获胜');
+                    else if (winner === 'draw') showGameOver('和棋');
+                }
+            } catch (e) {
+                aiThinking = false;
+                console.warn('doAIMove error:', e);
+                try {
+                    currentTurn = aiColor;
+                    const fallback = getFallbackMove();
+                    if (fallback && placeStone(fallback.r, fallback.c, aiColor)) {
+                        if (canvas && !ctx && canvas.getContext) ctx = canvas.getContext('2d');
+                        render();
+                        updateStatus();
+                    } else {
+                        currentTurn = playerColorPreference;
+                    }
+                } catch (e2) {
+                    console.warn('doAIMove fallback error:', e2);
                     currentTurn = playerColorPreference;
                 }
-            } catch (e2) {
-                console.warn('doAIMove fallback error:', e2);
-                currentTurn = playerColorPreference;
             }
-        }
+            updateStatus();
+        });
     }
 
     function onCellClick(r, c) {
         if (!canPlayerMove()) return;
-        if (placeStone(r, c, playerColorPreference)) {
+        const colorToPlace = mode === 'online' ? myColor : playerColorPreference;
+        if (placeStone(r, c, colorToPlace)) {
             render();
             updateStatus();
+            if (mode === 'online' && socket) {
+                onlineMovePending = true;
+                const colorStr = myColor === BLACK ? 'black' : 'white';
+                socket.emit('move', { row: r, col: c, color: colorStr });
+            }
             if (gameOver) {
-                if (winner === playerColorPreference) showGameOver('你赢了！');
+                if (winner === colorToPlace) showGameOver('你赢了！');
                 else if (winner === 'draw') showGameOver('和棋');
                 return;
             }
             if (mode === 'ai') {
                 setTimeout(doAIMove, 50);
-            } else if (mode === 'online' && socket) {
-                const colorStr = myColor === BLACK ? 'black' : 'white';
-                socket.emit('move', { row: r, col: c, color: colorStr });
             }
         }
+    }
+
+    function updateCreateRoomButton() {
+        const btn = $('btn-create-room');
+        if (!btn) return;
+        btn.disabled = !!(roomId && mode === 'online');
+    }
+
+    function renderRoomItem(room) {
+        const li = document.createElement('li');
+        li.className = 'room-item';
+        const statusText = room.status === 'waiting' ? '等待中' : '对局中';
+        const specText = room.spectatorCount > 0 ? ` · ${room.spectatorCount}人观战` : '';
+        const isMine = room.isMine;
+        let btnHtml = '';
+        if (isMine) {
+            btnHtml = '<button type="button" class="btn btn-secondary btn-join-room" data-room-id="' + room.roomId + '">进入</button>';
+        } else {
+            btnHtml = room.status === 'waiting' ?
+                '<button type="button" class="btn btn-primary btn-join-room" data-room-id="' + room.roomId + '">加入</button>' :
+                '<button type="button" class="btn btn-secondary btn-spectate-room" data-room-id="' + room.roomId + '">观战</button>';
+        }
+        li.innerHTML = '<div class="room-item-info">' +
+            '<span class="room-item-id">' + room.roomId + '</span>' +
+            '<span class="room-item-status ' + room.status + '">' + statusText + specText + '</span>' +
+            '</div>' +
+            '<div class="room-item-btns">' + btnHtml + '</div>';
+        return li;
+    }
+
+    function renderRoomList(data) {
+        const myList = $('room-list-my');
+        const myEmpty = $('room-list-my-empty');
+        const otherList = $('room-list-other');
+        const otherEmpty = $('room-list-other-empty');
+        if (!myList || !otherList) return;
+        const myRooms = data && data.myRooms ? data.myRooms : [];
+        const otherRooms = data && data.otherRooms ? data.otherRooms : [];
+        myList.innerHTML = '';
+        otherList.innerHTML = '';
+        myEmpty.style.display = myRooms.length === 0 ? '' : 'none';
+        otherEmpty.style.display = otherRooms.length === 0 ? '' : 'none';
+        myRooms.forEach(room => myList.appendChild(renderRoomItem(room)));
+        otherRooms.forEach(room => otherList.appendChild(renderRoomItem(room)));
     }
 
     // ----- Socket -----
@@ -750,6 +903,8 @@
         if (socket && socket.connected) return;
 
         if (!socket) {
+            const connEl = $('connection-status');
+            if (connEl) connEl.textContent = '(连接中...)';
             socket = io({ 
                 path: '/socket.io', 
                 transports: ['websocket', 'polling'],
@@ -760,50 +915,83 @@
 
             socket.on('connect', () => {
                 console.log('Socket connected');
+                socket.emit('getRoomList');
+                const statusEl = $('room-status');
+                if (statusEl && mode === 'online') statusEl.textContent = '已连接';
+                const connEl = $('connection-status');
+                if (connEl) connEl.textContent = '(已连接)';
                 updateStatus();
             });
 
             socket.on('connect_error', (err) => {
                 console.error('Socket connection error:', err);
-                $('room-status').textContent = '连接服务器失败...';
+                const statusEl = $('room-status');
+                if (statusEl) statusEl.textContent = '连接服务器失败...';
+                const connEl = $('connection-status');
+                if (connEl) connEl.textContent = '(连接失败)';
+                alert('无法连接服务器，请确保已运行 node server.js 并访问 http://localhost:8000');
             });
 
             socket.on('error', (data) => {
                 if (data && data.message) alert(data.message);
             });
 
+            socket.on('roomList', (list) => {
+                renderRoomList(list);
+            });
+
             socket.on('roomCreated', (data) => {
                 roomId = data.roomId;
-                myColor = BLACK; // 服务器端 black 对应黑色
+                myColor = BLACK;
+                isSpectator = false;
                 $('display-room-id').textContent = roomId;
                 $('room-status').textContent = '等待对手加入...';
                 show($('room-info'));
-                hide($('room-actions'));
+                show($('room-list-wrap'));
+                updateCreateRoomButton();
+                socket.emit('getRoomList');
             });
 
             socket.on('roomJoined', (data) => {
-                myColor = WHITE; // 服务器端 white 对应白色
                 roomId = data.roomId;
+                isSpectator = data.role === 'spectator';
+                myColor = data.role === 'black' ? BLACK : (data.role === 'white' ? WHITE : null);
                 $('display-room-id').textContent = roomId;
-                $('room-status').textContent = '已加入，等待游戏开始';
+                $('room-status').textContent = isSpectator ? '观战中' : '已加入对局';
                 show($('room-info'));
-                hide($('room-actions'));
+                show($('room-list-wrap'));
+                updateCreateRoomButton();
             });
 
             socket.on('gameStart', (data) => {
                 board = data.board || Array(BOARD_SIZE).fill(null).map(() => Array(BOARD_SIZE).fill(EMPTY));
                 moveHistory = data.moveHistory || [];
                 currentTurn = data.currentTurn === 'white' ? WHITE : BLACK;
-                gameOver = false;
-                winner = null;
+                gameOver = data.gameOver || false;
+                winner = data.winner ? (data.winner === 'black' ? BLACK : (data.winner === 'white' ? WHITE : 'draw')) : null;
+                isWaitingForOpponent = data.hasOpponent === false;
                 hide($('setup-panel'));
                 show($('game-panel'));
                 hide($('online-setup'));
+                const roomInfoEl = $('game-room-info');
+                const roomIdEl = $('game-room-id');
+                if (roomInfoEl && roomIdEl && roomId) {
+                    roomIdEl.textContent = roomId;
+                    show(roomInfoEl);
+                }
+                if (isSpectator) {
+                    hide($('action-btns'));
+                    show($('spectator-notice'));
+                } else {
+                    show($('action-btns'));
+                    hide($('spectator-notice'));
+                }
                 render();
                 updateStatus();
             });
 
             socket.on('move', (data) => {
+                onlineMovePending = false;
                 const color = data.color === 'black' ? BLACK : WHITE;
                 if (placeStone(data.row, data.col, color)) {
                     render();
@@ -838,29 +1026,47 @@
             });
 
             socket.on('gameOver', (data) => {
+                onlineMovePending = false;
                 gameOver = true;
                 winner = data.winner === 'black' ? BLACK : (data.winner === 'white' ? WHITE : 'draw');
                 updateStatus();
-                if (data.reason === 'resign') {
-                    showGameOver(winner === myColor ? '对方认输，你赢了！' : '你认输了');
+                let msg = '';
+                if (isSpectator) {
+                    msg = data.reason === 'resign' ? '一方认输，对局结束' : (data.reason === 'draw' ? '和棋' : '对局结束');
+                } else if (data.reason === 'resign') {
+                    msg = winner === myColor ? '对方认输，你赢了！' : '你认输了';
                 } else if (data.reason === 'win') {
-                    showGameOver(winner === myColor ? '你赢了！' : '你输了');
+                    msg = winner === myColor ? '你赢了！' : '你输了';
                 } else if (data.reason === 'draw') {
-                    showGameOver('棋盘已满，和棋');
+                    msg = '棋盘已满，和棋';
+                } else {
+                    msg = winner === myColor ? '你赢了！' : (winner === 'draw' ? '和棋' : '你输了');
                 }
+                showGameOver(msg || '游戏结束');
             });
 
             socket.on('opponentLeft', () => {
-                if (!gameOver) {
-                    alert('对方已离开游戏');
-                    backToLobby();
-                }
+                onlineMovePending = false;
+                // 延迟处理，确保 gameOver 事件先到达，双方都能看到胜负弹框
+                setTimeout(() => {
+                    if (!gameOver) {
+                        if (isSpectator) {
+                            alert('对局已结束，玩家已离开');
+                        } else {
+                            alert('对方已离开游戏');
+                        }
+                        backToLobby();
+                    }
+                }, 800);
             });
 
             socket.on('disconnect', () => {
                 console.log('Socket disconnected');
+                const connEl = $('connection-status');
+                if (connEl) connEl.textContent = '(已断开)';
                 if (mode === 'online' && !gameOver) {
-                    $('game-status').textContent = '网络连接断开，尝试重连...';
+                    const statusEl = $('game-status');
+                    if (statusEl) statusEl.textContent = '网络连接断开，尝试重连...';
                 }
             });
         } else {
@@ -871,20 +1077,18 @@
     function startAIGame() {
         initBoard();
         hide($('setup-panel'));
+        hide($('game-room-info'));
         show($('game-panel'));
         render();
         updateStatus();
+        initAIWorker(); // 预初始化 Worker，首次 AI 落子时无额外延迟
         if (playerColorPreference === WHITE) {
             setTimeout(doAIMove, 500);
         }
     }
 
-    function startOnlineGame() {
-        if (!roomId) return;
-        socket.emit('startGame', { roomId });
-    }
-
     function requestUndo() {
+        if (gameOver) return;
         if (mode === 'ai') {
             if (undoLastTwo()) {
                 render();
@@ -908,10 +1112,17 @@
     }
 
     function backToLobby() {
+        aiThinking = false;
+        onlineMovePending = false;
+        isSpectator = false;
+        isWaitingForOpponent = false;
         if (mode === 'online' && socket) {
             socket.emit('leaveRoom', { roomId });
         }
+        roomId = null;
+        myColor = null;
         hide($('game-panel'));
+        hide($('game-room-info'));
         show($('setup-panel'));
         $('game-over-modal').style.display = 'none';
         $('undo-request-modal').style.display = 'none';
@@ -922,7 +1133,10 @@
         } else {
             show($('online-setup'));
             show($('room-actions'));
+            show($('room-list-wrap'));
             hide($('room-info'));
+            updateCreateRoomButton();
+            if (socket && socket.connected) socket.emit('getRoomList');
         }
     }
 
@@ -942,6 +1156,12 @@
                 btn.classList.add('active');
                 mode = btn.dataset.mode;
                 if (mode === 'ai') {
+                    if (roomId && socket && socket.connected) {
+                        socket.emit('leaveRoom', { roomId });
+                        roomId = null;
+                        myColor = null;
+                        isWaitingForOpponent = false;
+                    }
                     hide($('online-setup'));
                     show($('ai-difficulty-group'));
                     show($('ai-color-group'));
@@ -951,6 +1171,10 @@
                     hide($('ai-difficulty-group'));
                     hide($('ai-color-group'));
                     hide($('btn-start-ai'));
+                    show($('room-actions'));
+                    show($('room-list-wrap'));
+                    hide($('room-info'));
+                    updateCreateRoomButton();
                     connectSocket();
                 }
             });
@@ -975,18 +1199,37 @@
         $('btn-start-ai').addEventListener('click', startAIGame);
 
         $('btn-create-room').addEventListener('click', () => {
+            if (roomId && mode === 'online') return;
             if (!socket) connectSocket();
+            if (!socket) return;
             if (socket.connected) socket.emit('createRoom');
             else socket.once('connect', () => socket.emit('createRoom'));
         });
 
-        $('btn-join-room').addEventListener('click', () => {
-            const id = $('room-id-input').value.trim();
-            if (!id) { alert('请输入房间号'); return; }
-            if (!socket) connectSocket();
-            const doJoin = () => socket.emit('joinRoom', { roomId: id });
-            if (socket.connected) doJoin();
-            else socket.once('connect', doJoin);
+        $('btn-refresh-rooms').addEventListener('click', () => {
+            if (socket && socket.connected) socket.emit('getRoomList');
+        });
+
+        document.getElementById('room-list-wrap')?.addEventListener('click', (e) => {
+            const joinBtn = e.target.closest('.btn-join-room');
+            const spectateBtn = e.target.closest('.btn-spectate-room');
+            if (joinBtn) {
+                const id = joinBtn.dataset.roomId;
+                if (!id) return;
+                if (!socket || !socket.connected) {
+                    alert('请等待连接服务器...');
+                    return;
+                }
+                socket.emit('joinRoom', { roomId: id });
+            } else if (spectateBtn) {
+                const id = spectateBtn.dataset.roomId;
+                if (!id) return;
+                if (!socket || !socket.connected) {
+                    alert('请等待连接服务器...');
+                    return;
+                }
+                socket.emit('spectateRoom', { roomId: id });
+            }
         });
 
         $('btn-undo').addEventListener('click', requestUndo);
@@ -994,6 +1237,7 @@
             if (confirm('确定认输吗？')) resign();
         });
         $('btn-back-lobby').addEventListener('click', backToLobby);
+        $('btn-leave-spectate')?.addEventListener('click', backToLobby);
 
         $('undo-accept').addEventListener('click', () => {
             if (socket) socket.emit('undoAccept', { roomId });
@@ -1008,7 +1252,7 @@
 
         $('btn-game-over-ok').addEventListener('click', () => {
             hideGameOver();
-            backToLobby();
+            // 仅关闭弹框，停留在游戏界面，用户可点击「返回大厅」再离开
         });
     }
 

@@ -1,7 +1,7 @@
 {
   "name": "sheep-game",
   "version": "2.0.3",
-  "description": "羊了个羊 - 完整实现版。基于HTML5、CSS3和JavaScript的三消游戏，支持金字塔式堆叠、智能分组、100%可解性保证。",
+  "description": "游戏大厅 - 羊了个羊、五子棋等多款小游戏。基于 HTML5、CSS3、JavaScript，支持人机对战与 Socket.IO 联机。",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -9,25 +9,12 @@
     "dev": "npx live-server --port=8000 --open=index.html",
     "open": "start index.html"
   },
-  "keywords": [
-    "game",
-    "sheep",
-    "match-3",
-    "puzzle",
-    "html5",
-    "javascript",
-    "羊了个羊"
-  ],
+  "keywords": ["game", "sheep", "match-3", "gomoku", "五子棋", "联机", "html5", "javascript", "羊了个羊"],
   "author": "Sheep Game Team",
   "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/your-username/sheep-game.git"
-  },
-  "bugs": {
-    "url": "https://github.com/your-username/sheep-game/issues"
-  },
+  "repository": {"type": "git", "url": "https://github.com/your-username/sheep-game.git"},
+  "bugs": {"url": "https://github.com/your-username/sheep-game/issues"},
   "homepage": "https://github.com/your-username/sheep-game#readme",
   "devDependencies": {},
-  "dependencies": { "socket.io": "^4.5.4" }
+  "dependencies": {"socket.io": "^4.5.4"}
 }

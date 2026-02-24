@@ -114,26 +114,127 @@ body {
 }
 
 .online-setup .room-actions {
+    display: flex;
+    gap: 10px;
     margin-bottom: 12px;
 }
 
-.join-row {
-    display: flex;
-    gap: 8px;
-    margin-top: 10px;
+.room-list-wrap {
+    margin-bottom: 12px;
 }
 
-#room-id-input {
-    flex: 1;
-    padding: 10px 14px;
+.room-list-section {
+    margin-bottom: 16px;
+}
+
+.room-list-section:last-child {
+    margin-bottom: 0;
+}
+
+.room-section-title {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--primary-color);
+    margin-bottom: 8px;
+}
+
+.room-list-label {
+    display: block;
+    font-size: 0.9rem;
+    color: #555;
+    margin-bottom: 8px;
+}
+
+.connection-status {
+    font-size: 0.8rem;
+    color: #27ae60;
+}
+
+.connection-status:empty {
+    display: none;
+}
+
+.room-list {
+    list-style: none;
+    max-height: 200px;
+    overflow-y: auto;
     border: 2px solid #DEE2E6;
     border-radius: 8px;
-    font-size: 1rem;
+    padding: 8px;
 }
 
-#room-id-input:focus {
-    outline: none;
-    border-color: var(--primary-color);
+.room-list-empty {
+    padding: 16px;
+    text-align: center;
+    color: #888;
+    font-size: 0.95rem;
+}
+
+.room-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    margin-bottom: 6px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    gap: 10px;
+}
+
+.room-item:last-child {
+    margin-bottom: 0;
+}
+
+.room-item-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.room-item-id {
+    font-weight: 700;
+    font-family: monospace;
+}
+
+.room-item-status {
+    font-size: 0.85rem;
+    color: #666;
+}
+
+.room-item-status.waiting {
+    color: #27ae60;
+}
+
+.room-item-status.playing {
+    color: #e67e22;
+}
+
+.room-item-btns {
+    display: flex;
+    gap: 6px;
+}
+
+.room-item-btns .btn {
+    padding: 6px 12px;
+    font-size: 0.85rem;
+}
+
+.spectator-notice {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 12px;
+    background: #e8f4f8;
+    border-radius: var(--radius);
+    margin-top: 12px;
+    font-size: 0.95rem;
+    color: #555;
+}
+
+.spectator-notice .btn-sm {
+    padding: 6px 14px;
+    font-size: 0.85rem;
 }
 
 .room-info {
@@ -168,6 +269,12 @@ body {
     transition: all 0.2s;
 }
 
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
 .btn-primary {
     background: var(--primary-color);
     color: white;
@@ -200,6 +307,21 @@ body {
 /* 游戏面板 */
 .game-panel {
     padding-top: 8px;
+}
+
+.game-room-info {
+    text-align: center;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    background: #e8f4f8;
+    border-radius: var(--radius);
+    font-size: 0.9rem;
+    color: #555;
+}
+
+.game-room-info strong {
+    font-family: monospace;
+    color: var(--primary-color);
 }
 
 .status-bar {
