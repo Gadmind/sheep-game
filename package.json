@@ -4,11 +4,15 @@
   "description": "游戏大厅 - 羊了个羊、五子棋等多款小游戏。基于 HTML5、CSS3、JavaScript，支持人机对战与 Socket.IO 联机。",
   "main": "server.js",
   "scripts": {
-    "dev": "node server.js",
     "build": "next build",
+    "dev": "node server.js",
     "start": "node server.js",
     "serve": "python server.py",
-    "open": "start index.html"
+    "open": "start index.html",
+    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "upload": "opennextjs-cloudflare build && opennextjs-cloudflare upload",
+    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
   },
   "keywords": [
     "game",
@@ -32,6 +36,7 @@
   },
   "homepage": "https://github.com/your-username/sheep-game#readme",
   "dependencies": {
+    "@opennextjs/cloudflare": "^1.17.1",
     "@tailwindcss/postcss": "^4.2.1",
     "autoprefixer": "^10.4.27",
     "next": "^16.1.6",
@@ -43,6 +48,7 @@
   },
   "devDependencies": {
     "@types/react": "19.2.14",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "wrangler": "^4.68.1"
   }
 }
