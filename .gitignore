@@ -69,3 +69,12 @@ images/*.gif
 # 文档草稿
 *.draft.md
 draft/
+
+# OpenNext
+.open-next
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+!.env.example
