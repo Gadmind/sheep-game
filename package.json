@@ -4,17 +4,45 @@
   "description": "游戏大厅 - 羊了个羊、五子棋等多款小游戏。基于 HTML5、CSS3、JavaScript，支持人机对战与 Socket.IO 联机。",
   "main": "server.js",
   "scripts": {
+    "dev": "node server.js",
+    "build": "next build",
     "start": "node server.js",
     "serve": "python server.py",
-    "dev": "npx live-server --port=8000 --open=index.html",
     "open": "start index.html"
   },
-  "keywords": ["game", "sheep", "match-3", "gomoku", "五子棋", "联机", "html5", "javascript", "羊了个羊"],
+  "keywords": [
+    "game",
+    "sheep",
+    "match-3",
+    "gomoku",
+    "五子棋",
+    "联机",
+    "html5",
+    "javascript",
+    "羊了个羊"
+  ],
   "author": "Sheep Game Team",
   "license": "MIT",
-  "repository": {"type": "git", "url": "https://github.com/your-username/sheep-game.git"},
-  "bugs": {"url": "https://github.com/your-username/sheep-game/issues"},
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/sheep-game.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-username/sheep-game/issues"
+  },
   "homepage": "https://github.com/your-username/sheep-game#readme",
-  "devDependencies": {},
-  "dependencies": {"socket.io": "^4.5.4"}
+  "dependencies": {
+    "@tailwindcss/postcss": "^4.2.1",
+    "autoprefixer": "^10.4.27",
+    "next": "^16.1.6",
+    "postcss": "^8.5.6",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "socket.io": "^4.8.3",
+    "tailwindcss": "^4.2.1"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.14",
+    "typescript": "5.9.3"
+  }
 }
