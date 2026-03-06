@@ -885,9 +885,10 @@ class SheepGame {
      */
     generatePyramidPositions(layers, rows, cols) {
         const positions = [];
+        const occupied = new Set();
 
         for (let layer = 0; layer < layers; layer++) {
-            const layerDensity = 0.6; // 每层密度
+            const layerDensity = 0.6;
             const cardsInLayer = Math.floor(rows * cols * layerDensity);
 
             // 上层使用偏移位置（金字塔效果）；使用日期 seed 时布局固定
@@ -901,12 +902,9 @@ class SheepGame {
                 const row = Math.floor(rnd() * (rows - 1)) + offset;
                 const col = Math.floor(rnd() * (cols - 1)) + offset;
 
-                // 检查位置是否已被占用
-                const isDuplicate = positions.some(pos =>
-                    pos[0] === layer && pos[1] === row && pos[2] === col
-                );
-
-                if (!isDuplicate) {
+                const key = `${layer},${row},${col}`;
+                if (!occupied.has(key)) {
+                    occupied.add(key);
                     positions.push([layer, row, col]);
                 }
             }
@@ -2069,58 +2067,7 @@ class SheepGame {
     }
 
     // 显示游戏结束弹窗（增强版）
-    showGameOver(isVictory) {
-        const modal = document.getElementById('game-over-modal');
-        const title = document.getElementById('game-result-title');
-        const text = document.getElementById('game-result-text');
-        const icon = document.getElementById('game-result-icon');
-
-        // 保存统计数据
-        this.updateStats(isVictory);
-
-        // 检查并保存最高分
-        const isNewRecord = this.saveHighScore();
-
-        if (isVictory) {
-            // 先触发胜利庆祝动效，动效结束后再显示弹窗
-            title.textContent = isNewRecord ? '🎉 新纪录！恭喜获胜！' : '恭喜获胜！🎉';
-            text.textContent = isNewRecord
-                ? `你成功消除了所有卡片，并创造了新的最高分！`
-                : '你成功消除了所有卡片！';
-            icon.innerHTML = '<i class="fas fa-trophy"></i>';
-            icon.style.color = '#FFD166';
-            this.playSound('win');
-
-            // 更新统计数据显示（弹窗内容先准备好）
-            const timeElapsed = Math.floor((new Date() - this.state.startTime) / 1000);
-            document.getElementById('final-score').textContent = this.state.score;
-            document.getElementById('final-moves').textContent = this.state.moveCount;
-            document.getElementById('final-time').textContent = `${timeElapsed}秒`;
-            document.getElementById('total-games').textContent = this.stats.gamesPlayed;
-            const winRate = this.stats.gamesPlayed > 0
-                ? Math.round((this.stats.gamesWon / this.stats.gamesPlayed) * 100)
-                : 0;
-            document.getElementById('win-rate').textContent = `${winRate}%`;
-            document.getElementById('best-score').textContent = this.highScore;
-            if (isNewRecord) {
-                this.showMessage(`🎉 新纪录！得分: ${this.state.score}`, 'success');
-            }
-
-            this.startCelebrationAnimation(() => {
-                // 庆祝动效结束后再显示弹窗
-                modal.classList.add('active');
-            });
-            return;
-        }
-
-        // 失败：直接显示弹窗
-        title.textContent = '游戏结束 😢';
-        text.textContent = '卡槽已满，没有可消除的卡片了';
-        icon.innerHTML = '<i class="fas fa-times-circle"></i>';
-        icon.style.color = '#EF476F';
-        this.playSound('lose');
-
-        // 更新统计数据显示
+    _renderResultStats() {
         const timeElapsed = Math.floor((new Date() - this.state.startTime) / 1000);
         document.getElementById('final-score').textContent = this.state.score;
         document.getElementById('final-moves').textContent = this.state.moveCount;
@@ -2131,8 +2078,44 @@ class SheepGame {
             : 0;
         document.getElementById('win-rate').textContent = `${winRate}%`;
         document.getElementById('best-score').textContent = this.highScore;
+    }
 
-        // 显示弹窗
+    showGameOver(isVictory) {
+        const modal = document.getElementById('game-over-modal');
+        const title = document.getElementById('game-result-title');
+        const text = document.getElementById('game-result-text');
+        const icon = document.getElementById('game-result-icon');
+
+        this.updateStats(isVictory);
+        const isNewRecord = this.saveHighScore();
+
+        if (isVictory) {
+            title.textContent = isNewRecord ? '🎉 新纪录！恭喜获胜！' : '恭喜获胜！🎉';
+            text.textContent = isNewRecord
+                ? `你成功消除了所有卡片，并创造了新的最高分！`
+                : '你成功消除了所有卡片！';
+            icon.innerHTML = '<i class="fas fa-trophy"></i>';
+            icon.style.color = '#FFD166';
+            this.playSound('win');
+
+            this._renderResultStats();
+            if (isNewRecord) {
+                this.showMessage(`🎉 新纪录！得分: ${this.state.score}`, 'success');
+            }
+
+            this.startCelebrationAnimation(() => {
+                modal.classList.add('active');
+            });
+            return;
+        }
+
+        title.textContent = '游戏结束 😢';
+        text.textContent = '卡槽已满，没有可消除的卡片了';
+        icon.innerHTML = '<i class="fas fa-times-circle"></i>';
+        icon.style.color = '#EF476F';
+        this.playSound('lose');
+
+        this._renderResultStats();
         modal.classList.add('active');
     }
 

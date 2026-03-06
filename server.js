@@ -6,10 +6,29 @@
  */
 
 const http = require('http');
-const { parse } = require('url');
+const path = require('path');
+const fs = require('fs');
 const { exec } = require('child_process');
-const next = require('next');
 const { Server } = require('socket.io');
+
+const mimeTypes = {
+    '.html': 'text/html',
+    '.css':  'text/css',
+    '.js':   'text/javascript',
+    '.json': 'application/json',
+    '.png':  'image/png',
+    '.jpg':  'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.gif':  'image/gif',
+    '.svg':  'image/svg+xml',
+    '.ico':  'image/x-icon',
+    '.woff': 'font/woff',
+    '.woff2':'font/woff2',
+    '.ttf':  'font/ttf',
+    '.mp3':  'audio/mpeg',
+    '.wav':  'audio/wav',
+    '.webp': 'image/webp',
+};
 
 // 配置
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -323,6 +342,8 @@ const server = http.createServer((req, res) => {
             room.board[m1.r][m1.c] = EMPTY;
             room.board[m2.r][m2.c] = EMPTY;
             room.gameOver = false;
+            // 回退轮次到第一步走棋者的颜色
+            room.currentTurn = m1.color === BLACK ? 'black' : 'white';
             io.to(roomId).emit('undoAccept', {
                 board: room.board,
                 moveHistory: room.moveHistory,
@@ -426,7 +447,6 @@ const server = http.createServer((req, res) => {
         }
         process.exit(1);
     });
-});
 
 process.on('SIGINT', () => {
     console.log('\n\n⛔ 服务器已停止');
