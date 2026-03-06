@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>羊了个羊 - 完整实现版</title>
+    <meta name="description" content="羊了个羊 - 金字塔式卡片堆叠三消游戏，挑战你的策略与运气">
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Sans+SC:wght@400;700&display=swap" rel="stylesheet">
@@ -53,7 +54,7 @@
             <div class="removed-area">
                 <div class="removed-title">
                     移出区 <span id="removed-count">0</span>
-                    <button id="btn-clear-removed" class="btn-clear-removed" title="清空移出区">
+                    <button id="btn-clear-removed" class="btn-clear-removed" title="清空移出区" aria-label="清空移出区">
                         <i class="fas fa-trash"></i>
                     </button>
                 </div>
@@ -151,7 +152,7 @@
             <div class="modal-content">
                 <div class="modal-header">
                     <h2 id="game-result-title">游戏结束</h2>
-                    <button class="modal-close">&times;</button>
+                    <button class="modal-close" aria-label="关闭">&times;</button>
                 </div>
                 <div class="modal-body">
                     <div id="game-result-icon" class="result-icon">
@@ -204,7 +205,7 @@
             <div class="modal-content">
                 <div class="modal-header">
                     <h2>游戏规则</h2>
-                    <button class="modal-close">&times;</button>
+                    <button class="modal-close" aria-label="关闭">&times;</button>
                 </div>
                 <div class="modal-body">
                     <h3><i class="fas fa-gamepad"></i> 如何玩</h3>

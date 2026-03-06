@@ -442,20 +442,39 @@
         li.className = 'room-item';
         const statusText = room.status === 'waiting' ? '等待中' : '对局中';
         const specText = room.spectatorCount > 0 ? ` · ${room.spectatorCount}人观战` : '';
-        const isMine = room.isMine;
-        let btnHtml = '';
-        if (isMine) {
-            btnHtml = '<button type="button" class="btn btn-secondary btn-join-room" data-room-id="' + room.roomId + '">进入</button>';
+
+        const infoDiv = document.createElement('div');
+        infoDiv.className = 'room-item-info';
+        const idSpan = document.createElement('span');
+        idSpan.className = 'room-item-id';
+        idSpan.textContent = room.roomId;
+        const statusSpan = document.createElement('span');
+        statusSpan.className = 'room-item-status ' + room.status;
+        statusSpan.textContent = statusText + specText;
+        infoDiv.appendChild(idSpan);
+        infoDiv.appendChild(statusSpan);
+
+        const btnsDiv = document.createElement('div');
+        btnsDiv.className = 'room-item-btns';
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        if (room.isMine) {
+            btn.className = 'btn btn-secondary btn-join-room';
+            btn.dataset.roomId = room.roomId;
+            btn.textContent = '进入';
+        } else if (room.status === 'waiting') {
+            btn.className = 'btn btn-primary btn-join-room';
+            btn.dataset.roomId = room.roomId;
+            btn.textContent = '加入';
         } else {
-            btnHtml = room.status === 'waiting' ?
-                '<button type="button" class="btn btn-primary btn-join-room" data-room-id="' + room.roomId + '">加入</button>' :
-                '<button type="button" class="btn btn-secondary btn-spectate-room" data-room-id="' + room.roomId + '">观战</button>';
+            btn.className = 'btn btn-secondary btn-spectate-room';
+            btn.dataset.roomId = room.roomId;
+            btn.textContent = '观战';
         }
-        li.innerHTML = '<div class="room-item-info">' +
-            '<span class="room-item-id">' + room.roomId + '</span>' +
-            '<span class="room-item-status ' + room.status + '">' + statusText + specText + '</span>' +
-            '</div>' +
-            '<div class="room-item-btns">' + btnHtml + '</div>';
+        btnsDiv.appendChild(btn);
+
+        li.appendChild(infoDiv);
+        li.appendChild(btnsDiv);
         return li;
     }
 

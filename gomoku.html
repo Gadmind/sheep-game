@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>五子棋</title>
+    <meta name="description" content="五子棋 - 支持人机对战与 Socket.IO 联机对战，可悔棋可认输">
     <link rel="stylesheet" href="gomoku.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700&display=swap" rel="stylesheet">
@@ -73,7 +74,7 @@
                 <span id="turn-indicator" class="turn-indicator"></span>
             </div>
             <div class="board-wrap">
-                <canvas id="gomoku-board" width="450" height="450"></canvas>
+                <canvas id="gomoku-board" width="450" height="450" role="img" aria-label="五子棋棋盘"></canvas>
             </div>
             <div id="action-btns" class="action-btns">
                 <button type="button" id="btn-undo" class="btn btn-secondary"><i class="fas fa-rotate-left"></i> 悔棋</button>
@@ -117,7 +118,7 @@
             </div>
         </div>
     </div>
-    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+    <script src="https://cdn.socket.io/4.8.3/socket.io.min.js"></script>
     <script src="gomoku-core.js"></script>
     <script src="gomoku.js"></script>
 </body>

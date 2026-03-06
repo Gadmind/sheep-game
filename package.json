@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "node server.js",
     "serve": "python server.py",
-    "open": "start index.html"
+    "open": "start index.html",
+    "sync:public": "node -e \"const fs=require('fs');['script.js','gomoku.js','gomoku-core.js','gomoku-ai-worker.js'].forEach(f=>fs.existsSync(f)&&fs.copyFileSync(f,'public/'+f))\""
   },
   "keywords": [
     "game",
@@ -34,7 +35,7 @@
   "dependencies": {
     "@tailwindcss/postcss": "^4.2.1",
     "autoprefixer": "^10.4.27",
-    "next": "^16.1.6",
+    "next": "^15.0.0",
     "postcss": "^8.5.6",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",

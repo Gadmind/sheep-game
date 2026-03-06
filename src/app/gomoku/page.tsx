@@ -220,9 +220,10 @@ export default function GomokuPage() {
       </div>
 
       <Script
-        src="https://cdn.socket.io/4.8.1/socket.io.min.js"
+        src="https://cdn.socket.io/4.8.3/socket.io.min.js"
         strategy="beforeInteractive"
       />
+      <Script src="/gomoku-core.js" strategy="beforeInteractive" />
       <Script src="/gomoku.js" strategy="afterInteractive" />
     </div>
   );

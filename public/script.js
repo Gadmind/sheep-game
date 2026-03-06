@@ -4,6 +4,9 @@
  * 优化版本：性能优化、本地存储、难度选择、更好的用户体验
  */
 
+// 卡片被视为「完全可见/可点击」的面积比例阈值
+const FULLY_VISIBLE_THRESHOLD = 0.99;
+
 // 游戏配置
 const CONFIG = {
     // 基础配置
@@ -23,15 +26,19 @@ const CONFIG = {
             cols: 2,
             cardTypes: 3,
             cardsPerType: 6,
-            maxSlot: 7
+            maxSlot: 7,
+            minCards: 0,
+            maxCards: 30
         },
         easy: {
             layers: 3,
-            rows: 3,             // 每层行数（9行布局）
-            cols: 3,             // 每层列数（7列布局）
-            cardTypes: 3,        // 卡片类型数量
-            cardsPerType: 9,    // 每种类型的卡片数量
-            maxSlot: 7        // 卡槽最大容量
+            rows: 3,
+            cols: 3,
+            cardTypes: 3,
+            cardsPerType: 9,
+            maxSlot: 7,
+            minCards: 0,
+            maxCards: 30
         },
         normal: {
             layers: 4,
@@ -287,7 +294,7 @@ class GridIndex {
     }
 
     /**
-     * 添加卡片到索引
+     * 添加卡片到索引（二分插入保持 layer 降序，避免每次整体 sort）
      */
     addCard(card) {
         const keys = this.getCardGridKeys(card);
@@ -296,9 +303,14 @@ class GridIndex {
                 this.grid.set(key, []);
             }
             const cards = this.grid.get(key);
-            cards.push(card);
-            // 按层排序，上层卡片在前
-            cards.sort((a, b) => b.layer - a.layer);
+            // 二分查找插入位置（降序：layer 大的在前）
+            let lo = 0, hi = cards.length;
+            while (lo < hi) {
+                const mid = (lo + hi) >> 1;
+                if (cards[mid].layer > card.layer) lo = mid + 1;
+                else hi = mid;
+            }
+            cards.splice(lo, 0, card);
         });
     }
 
@@ -790,22 +802,18 @@ class SheepGame {
         // 布局已由日期 seed 固定；牌型顺序用 Math.random，每次开局不同
         this._deckRandom = null;
 
-        // 3. 计算目标卡片总数：
-        //    - 在 210 到 240 之间
-        //    - 不能超过可用位置数
-        //    - 必须是 3 的倍数（方便三消）
-        const MIN_TOTAL_CARDS = 210;
-        const MAX_TOTAL_CARDS = 240;
+        // 3. 计算目标卡片总数：不超过可用位置数，且必须是 3 的倍数（方便三消）
+        //    minCards/maxCards 可在各难度配置中独立设置
+        const cfg2 = this._effectiveConfig || getEffectiveConfig(this.settings);
+        const MIN_TOTAL_CARDS = cfg2.minCards ?? 210;
+        const MAX_TOTAL_CARDS = cfg2.maxCards ?? 240;
 
         let targetTotal = Math.min(MAX_TOTAL_CARDS, maxPositions);
         // 向下取到最近的 3 的倍数
         targetTotal -= (targetTotal % 3);
-
+        // 确保不低于难度规定的最小值
         if (targetTotal < MIN_TOTAL_CARDS) {
-            console.warn(
-                '[SheepGame] 可用位置不足以满足 210~240 张卡片的要求，' +
-                `当前可用位置=${maxPositions}，实际生成卡片数=${targetTotal}（仍保证为 3 的倍数）`
-            );
+            targetTotal = MIN_TOTAL_CARDS - (MIN_TOTAL_CARDS % 3);
         }
 
         // 4. 根据目标总数为每种类型分配卡片数量（每种类型也是 3 的倍数）
@@ -865,12 +873,13 @@ class SheepGame {
         // 8. 验证可解性（这里通常是通过的，因为每种类型都是 3 的倍数）
         this.validateDeckSolvability();
 
-        // 调试输出：查看实际卡片总数
-        console.log(
-            `[SheepGame] 本局生成卡片总数=${this.state.deck.length}（` +
-            `范围期望：${MIN_TOTAL_CARDS}~${MAX_TOTAL_CARDS}，` +
-            `是否为 3 的倍数=${this.state.deck.length % 3 === 0}）`
-        );
+        if (typeof window !== 'undefined' && window.location && window.location.hostname === 'localhost') {
+            console.log(
+                `[SheepGame] 本局生成卡片总数=${this.state.deck.length}（` +
+                `范围期望：${MIN_TOTAL_CARDS}~${MAX_TOTAL_CARDS}，` +
+                `是否为 3 的倍数=${this.state.deck.length % 3 === 0}）`
+            );
+        }
     }
 
     /**
@@ -962,33 +971,6 @@ class SheepGame {
     }
 
     /**
-     * 生成所有有效位置（优化版）
-     * 确保生成的位置分布合理且不重复
-     */
-    generateAllValidPositions(layers, rows, cols) {
-        const positions = [];
-        const density = 0.6; // 每层填充密度
-
-        for (let layer = 0; layer < layers; layer++) {
-            const positionsInLayer = Math.floor(rows * cols * density);
-            const layerPositions = [];
-
-            // 生成当前层的所有可能位置
-            for (let r = 0; r < rows; r++) {
-                for (let c = 0; c < cols; c++) {
-                    layerPositions.push([layer, r, c]);
-                }
-            }
-
-            // 随机洗牌并选择部分位置
-            this.shuffleArray(layerPositions);
-            positions.push(...layerPositions.slice(0, positionsInLayer));
-        }
-
-        return positions;
-    }
-
-    /**
      * 验证牌堆的可解性（适配一维数组）
      * 确保每种类型的卡片数量都是3的倍数
      */
@@ -1006,7 +988,8 @@ class SheepGame {
         let isValid = true;
         for (const type in typeCounts) {
             if (typeCounts[type] % 3 !== 0) {
-                console.warn(`卡片类型 ${type} 数量不是3的倍数: ${typeCounts[type]}`);
+                if (typeof window !== 'undefined' && window.location?.hostname === 'localhost')
+                    console.warn(`卡片类型 ${type} 数量不是3的倍数: ${typeCounts[type]}`);
                 isValid = false;
             }
         }
@@ -1024,32 +1007,30 @@ class SheepGame {
      * 移除多余的卡片使每种类型都是3的倍数
      */
     adjustDeckForSolvability(typeCounts) {
-        console.log('正在调整牌堆以确保可解性...');
+        if (typeof window !== 'undefined' && window.location?.hostname === 'localhost')
+            console.log('正在调整牌堆以确保可解性...');
 
         for (const type in typeCounts) {
             const count = typeCounts[type];
             const remainder = count % 3;
 
             if (remainder !== 0) {
-                const toRemove = remainder;
-                let removed = 0;
-
-                // 从数组中移除多余的卡片（从底层开始）
-                for (let i = 0; i < this.state.deck.length && removed < toRemove; i++) {
-                    const card = this.state.deck[i];
-                    if (card && card.type === parseInt(type)) {
-                        this.state.deck.splice(i, 1);
-                        removed++;
-                        i--; // 调整索引
+                let toRemove = remainder;
+                this.state.deck = this.state.deck.filter(card => {
+                    if (card && card.type === parseInt(type) && toRemove > 0) {
+                        toRemove--;
+                        return false;
                     }
-                }
+                    return true;
+                });
             }
         }
 
-        console.log('牌堆调整完成，现在可以完全消除');
+        if (typeof window !== 'undefined' && window.location?.hostname === 'localhost')
+            console.log('牌堆调整完成，现在可以完全消除');
     }
 
-    // 更新可见卡片（基于可见区域掩码）
+    // 全量重算可见卡片（初始化时使用）
     updateVisibleCards() {
         this.state.visibleCards = [];
 
@@ -1066,21 +1047,62 @@ class SheepGame {
         this.state.deck.forEach(card => {
             if (!card || card.removed) return;
 
-            // 计算可见区域掩码
             const visibleRegions = VisibilityMask.calculateVisibleRegions(
                 card,
                 this.state.deck,
                 this.gridIndex
             );
 
-            // 存储可见区域信息
             card.visibleRegions = visibleRegions;
             card.visibleAreaRatio = VisibilityMask.getVisibleAreaRatio(visibleRegions);
 
-            // 如果有可见区域，标记为可见
             if (visibleRegions.length > 0 && card.visibleAreaRatio > 0) {
                 card.visible = true;
                 this.state.visibleCards.push(card);
+            }
+        });
+    }
+
+    /**
+     * 增量更新：仅重算被移除卡片所覆盖的下层卡片（O(k) 而非 O(n²)）
+     * 在 handleCardClick 中替代全量 updateVisibleCards，显著降低每次点击的开销
+     * @param {Object} removedCard - 刚被移除（card.removed=true 且已从 gridIndex 摘除）的卡片
+     */
+    updateVisibleCardsAfterRemoval(removedCard) {
+        // 1. 从 visibleCards 中移除已消失的卡片
+        const removedIdx = this.state.visibleCards.indexOf(removedCard);
+        if (removedIdx !== -1) {
+            this.state.visibleCards.splice(removedIdx, 1);
+        }
+
+        // 2. 找出被 removedCard 遮挡的下层卡片（它们可能因此变得更可见）
+        const gridKeys = this.gridIndex.getCardGridKeys(removedCard);
+        const affectedCards = new Set();
+        gridKeys.forEach(key => {
+            const [row, col] = key.split(',').map(Number);
+            this.gridIndex.getCardsAt(row, col).forEach(c => {
+                if (c && !c.removed && c.layer < removedCard.layer) {
+                    affectedCards.add(c);
+                }
+            });
+        });
+
+        // 3. 重新计算受影响卡片的可见性
+        affectedCards.forEach(card => {
+            const wasVisible = card.visible;
+            const visibleRegions = VisibilityMask.calculateVisibleRegions(
+                card, this.state.deck, this.gridIndex
+            );
+            card.visibleRegions = visibleRegions;
+            card.visibleAreaRatio = VisibilityMask.getVisibleAreaRatio(visibleRegions);
+            const isNowVisible = visibleRegions.length > 0 && card.visibleAreaRatio > 0;
+            card.visible = isNowVisible;
+
+            if (!wasVisible && isNowVisible) {
+                this.state.visibleCards.push(card);
+            } else if (wasVisible && !isNowVisible) {
+                const idx = this.state.visibleCards.indexOf(card);
+                if (idx !== -1) this.state.visibleCards.splice(idx, 1);
             }
         });
     }
@@ -1248,10 +1270,8 @@ class SheepGame {
             }
         }
 
-        // 检查是否完全可见：
-        // 只有当可见面积比例接近1（这里要求>=0.99）时才允许点击，
-        // 部分露出的卡片可以看到，但不能被选择点击
-        if (card.visibleAreaRatio < 0.99) {
+        // 只有完全可见的卡片（面积比例 >= FULLY_VISIBLE_THRESHOLD）才允许点击
+        if (card.visibleAreaRatio < FULLY_VISIBLE_THRESHOLD) {
             return;
         }
 
@@ -1272,7 +1292,7 @@ class SheepGame {
         this.gridIndex.removeCard(card);
 
         // 更新可见卡片（释放下层卡片）
-        this.updateVisibleCards();
+        this.updateVisibleCardsAfterRemoval(card);
 
         // 检查匹配
         this.checkForMatches();
@@ -1283,7 +1303,7 @@ class SheepGame {
         // 更新UI
         this.updateUI();
         this.renderCards();
-        this.renderSlot();  // 重新渲染卡槽，显示新添加的卡片
+        this.renderSlot(card.id);  // 传入 card.id，仅对该卡播放入场动画
 
         // 播放音效（模拟）
         this.playSound('click');
@@ -1583,58 +1603,33 @@ class SheepGame {
         return array;
     }
 
-    // 显示消息
+    // 显示消息（清除上一个计时器，避免快速连续调用时提前隐藏）
     showMessage(text, type = 'info') {
         const messageEl = document.getElementById('message');
         messageEl.textContent = text;
         messageEl.className = `message ${type}`;
         messageEl.classList.add('show');
 
-        // 3秒后隐藏
-        setTimeout(() => {
+        clearTimeout(this._messageTimer);
+        this._messageTimer = setTimeout(() => {
             messageEl.classList.remove('show');
         }, 3000);
     }
 
-    // 播放音效（改进版）
     playSound(sound) {
         if (!this.soundEnabled) return;
-
-        // 实际项目中可以加载音频文件
-        // 这里使用Web Audio API或HTML5 Audio实现
-        // 为了演示，使用控制台输出
-        console.log(`🔊 播放音效: ${sound}`);
-
-        // 示例：可以使用HTML5 Audio API
+        // TODO: 加载实际音频文件，例如:
         // const audio = new Audio(`sounds/${sound}.mp3`);
         // audio.volume = 0.5;
-        // audio.play().catch(err => console.log('音频播放失败:', err));
-
-        // 简单的视觉反馈
-        this.provideSoundFeedback(sound);
-    }
-
-    /**
-     * 提供音效的视觉反馈
-     */
-    provideSoundFeedback(sound) {
-        // 可以添加简单的视觉效果来替代音效
-        const feedbackMap = {
-            'click': '✓',
-            'match': '✨',
-            'tool': '🔧',
-            'shuffle': '🔄',
-            'hint': '💡',
-            'win': '🎉',
-            'lose': '😢'
-        };
-
-        const emoji = feedbackMap[sound] || '🔊';
-        // 可以在这里添加一些动画效果
+        // audio.play().catch(() => {});
     }
 
     // 渲染卡片（金字塔式堆叠版本）
     renderCards() {
+        // 重新渲染时清空悬停状态，防止旧 DOM 引用残留
+        this._hoveredCardEl = null;
+        this._hoveredCard = null;
+
         const pileEl = document.getElementById('card-pile');
         pileEl.innerHTML = '<div class="pile-bg"></div>';
 
@@ -1642,11 +1637,18 @@ class SheepGame {
         const allCards = this.state.deck.filter(card => card && !card.removed);
         allCards.sort((a, b) => a.zIndex - b.zIndex);
 
+        // 计算一次布局参数，缓存供事件委托处理器使用
+        const layout = this.calculateCardLayout();
+        this._cachedLayout = layout;
+
+        // 构建 id→card 映射，供事件委托快速查找
+        this._cardMap = new Map(allCards.map(card => [card.id, card]));
+
         // 使用DocumentFragment批量添加DOM元素，提升性能
         const fragment = document.createDocumentFragment();
 
         allCards.forEach(card => {
-            const cardEl = this.createCardElement(card);
+            const cardEl = this.createCardElement(card, layout);
             fragment.appendChild(cardEl);
         });
 
@@ -1716,20 +1718,17 @@ class SheepGame {
 
     /**
      * 创建单个卡片元素（自适应版本 - 所有卡片统一尺寸）
+     * @param {Object} card - 卡片数据
+     * @param {Object} [layout] - 预计算的布局参数，避免重复 DOM 查询
      */
-    createCardElement(card) {
+    createCardElement(card, layout) {
         const cardEl = document.createElement('div');
 
-        // 基于可见性和可点击性添加语义化 class：
-        // - 完全可见且可点击：card-selectable（高亮）
-        // - 部分可见或被遮挡：card-disabled（置灰，不可点击）
-        // - 完全不可见：hidden
         const classList = ['card'];
         if (!card.visible) {
             classList.push('hidden');
         } else {
-            // 与点击逻辑保持一致：只有 visibleAreaRatio >= 0.99 才可点击
-            if (card.visibleAreaRatio !== undefined && card.visibleAreaRatio >= 0.99) {
+            if (card.visibleAreaRatio !== undefined && card.visibleAreaRatio >= FULLY_VISIBLE_THRESHOLD) {
                 classList.push('card-selectable');
             } else {
                 classList.push('card-disabled');
@@ -1738,8 +1737,7 @@ class SheepGame {
         cardEl.className = classList.join(' ');
         cardEl.dataset.id = card.id;
 
-        // 获取自适应布局参数
-        const layout = this.calculateCardLayout();
+        if (!layout) layout = this.calculateCardLayout();
 
         // 计算卡片在网格中的位置；同格堆叠时按 layer 做视觉偏移，露出下层边缘
         const stackOffset = layout.stackOffsetPerLayer ?? layout.layerOffset ?? 3;
@@ -1783,20 +1781,7 @@ class SheepGame {
             this.addVisibleRegionMask(cardEl, card, layout);
         }
 
-        // 添加点击事件（传递坐标）
-        cardEl.addEventListener('click', (e) => {
-            this.handleCardClick(card.id, e.clientX, e.clientY);
-        });
-
-        // 添加鼠标移动事件，高亮可见区域
-        cardEl.addEventListener('mousemove', (e) => {
-            this.handleCardHover(cardEl, card, e, layout);
-        });
-
-        cardEl.addEventListener('mouseleave', () => {
-            this.handleCardLeave(cardEl, card);
-        });
-
+        // 事件监听已移至 card-pile 上的委托处理器（见 bindEvents）
         return cardEl;
     }
 
@@ -1907,8 +1892,8 @@ class SheepGame {
         }
     }
 
-    // 渲染卡槽（性能优化版本）
-    renderSlot() {
+    // 渲染卡槽（newCardId：仅对该 id 的卡片播放入场动画，避免撤销/洗牌时误触发）
+    renderSlot(newCardId = null) {
         const slotEl = document.getElementById('card-slot');
         slotEl.innerHTML = '';
 
@@ -1935,8 +1920,8 @@ class SheepGame {
                 cardEl.classList.add('grouped-right');
             }
 
-            // 添加动画（最新添加的卡片）
-            if (index === this.state.selectedCards.length - 1) {
+            // 只对刚刚被点击加入的那张卡播放入场动画
+            if (newCardId && card.id === newCardId) {
                 cardEl.style.animation = `slideIn ${CONFIG.animationDuration}ms ease-out`;
                 cardEl.classList.add('new-card');
             }
@@ -1956,7 +1941,6 @@ class SheepGame {
 
         removedEl.innerHTML = '';
 
-        // 使用DocumentFragment批量添加
         const fragment = document.createDocumentFragment();
 
         this.state.removedCards.forEach((card, index) => {
@@ -1969,23 +1953,18 @@ class SheepGame {
             cardEl.dataset.index = index;
             cardEl.title = '点击移回卡槽';
 
-            // 添加点击事件：移回卡槽
-            cardEl.addEventListener('click', () => {
-                this.restoreCardFromRemoved(index);
-            });
-
             fragment.appendChild(cardEl);
         });
 
         removedEl.appendChild(fragment);
 
-        // 更新移出区计数（不限制数量）
+        // 事件委托已在 bindEvents 中绑定，无需为每张卡片单独监听
+
         const removedCountEl = document.getElementById('removed-count');
         if (removedCountEl) {
             removedCountEl.textContent = this.state.removedCards.length;
         }
 
-        // 更新清空按钮状态
         const clearBtn = document.getElementById('btn-clear-removed');
         if (clearBtn) {
             clearBtn.disabled = this.state.removedCards.length === 0;
@@ -2497,6 +2476,17 @@ class SheepGame {
         document.getElementById('tool-shuffle').addEventListener('click', () => this.useShuffleTool());
         document.getElementById('tool-hint').addEventListener('click', () => this.useHintTool());
 
+        // 移出区事件委托（替代每张卡片独立绑定 click）
+        const removedSlotEl = document.getElementById('removed-slot');
+        if (removedSlotEl) {
+            removedSlotEl.addEventListener('click', (e) => {
+                const cardEl = e.target.closest('.removed-card');
+                if (!cardEl) return;
+                const index = parseInt(cardEl.dataset.index, 10);
+                if (!isNaN(index)) this.restoreCardFromRemoved(index);
+            });
+        }
+
         // 清空移出区按钮
         const clearRemovedBtn = document.getElementById('btn-clear-removed');
         if (clearRemovedBtn) {
@@ -2517,18 +2507,22 @@ class SheepGame {
         });
 
         // 分享按钮
-        document.getElementById('btn-share').addEventListener('click', () => {
+        document.getElementById('btn-share').addEventListener('click', async () => {
             const text = `我在《羊了个羊》中获得了${this.state.score}分！`;
-            if (navigator.share) {
-                navigator.share({
-                    title: '羊了个羊',
-                    text: text,
-                    url: window.location.href
-                });
-            } else {
-                navigator.clipboard.writeText(text).then(() => {
+            try {
+                if (navigator.share) {
+                    await navigator.share({ title: '羊了个羊', text, url: window.location.href });
+                    this.showMessage('分享成功', 'success');
+                } else if (navigator.clipboard?.writeText) {
+                    await navigator.clipboard.writeText(text);
                     this.showMessage('战绩已复制到剪贴板', 'success');
-                });
+                } else {
+                    this.showMessage('当前环境不支持分享，请手动复制', 'info');
+                }
+            } catch (err) {
+                if (err.name !== 'AbortError') {
+                    this.showMessage('分享失败，请手动复制', 'info');
+                }
             }
         });
 
@@ -2556,16 +2550,83 @@ class SheepGame {
             });
         });
 
-        // 窗口大小改变时重新渲染卡片（自适应布局）
-        let resizeTimeout;
-        window.addEventListener('resize', () => {
-            // 使用防抖避免频繁重绘
-            clearTimeout(resizeTimeout);
-            resizeTimeout = setTimeout(() => {
-                if (!this.state.gameOver) {
-                    this.renderCards();
-                }
-            }, 300);
+        // 窗口大小改变时重新渲染卡片（使用 PerformanceHelper 防抖）
+        window.addEventListener('resize', PerformanceHelper.debounce(() => {
+            if (!this.state.gameOver) {
+                this.renderCards();
+            }
+        }, 300));
+
+        // ── 卡片堆事件委托（替代每张卡独立绑定 3 个监听器）──────────────────
+        // 鼠标点击 & 触摸点击均由此处统一处理
+        const pileEl = document.getElementById('card-pile');
+
+        pileEl.addEventListener('click', (e) => {
+            const cardEl = e.target.closest('[data-id]');
+            if (!cardEl) return;
+            this.handleCardClick(cardEl.dataset.id, e.clientX, e.clientY);
+        });
+
+        pileEl.addEventListener('mousemove', (e) => {
+            const cardEl = e.target.closest('[data-id]');
+            if (this._hoveredCardEl && this._hoveredCardEl !== cardEl) {
+                this.handleCardLeave(this._hoveredCardEl, this._hoveredCard);
+                this._hoveredCardEl = null;
+                this._hoveredCard = null;
+            }
+            if (!cardEl) return;
+            const card = this._cardMap?.get(cardEl.dataset.id);
+            if (!card) return;
+            this._hoveredCardEl = cardEl;
+            this._hoveredCard = card;
+            this.handleCardHover(cardEl, card, e, this._cachedLayout);
+        });
+
+        pileEl.addEventListener('mouseleave', () => {
+            if (this._hoveredCardEl) {
+                this.handleCardLeave(this._hoveredCardEl, this._hoveredCard);
+                this._hoveredCardEl = null;
+                this._hoveredCard = null;
+            }
+        });
+
+        // ── 移动端触摸事件支持 ────────────────────────────────────────────────
+        pileEl.addEventListener('touchend', (e) => {
+            const touch = e.changedTouches[0];
+            const el = document.elementFromPoint(touch.clientX, touch.clientY);
+            const cardEl = el?.closest('[data-id]');
+            if (cardEl) {
+                e.preventDefault(); // 防止触发后续 click 事件重复执行
+                this.handleCardClick(cardEl.dataset.id, touch.clientX, touch.clientY);
+            }
+        }, { passive: false });
+
+        pileEl.addEventListener('touchmove', (e) => {
+            const touch = e.changedTouches[0];
+            const el = document.elementFromPoint(touch.clientX, touch.clientY);
+            const cardEl = el?.closest('[data-id]');
+            if (this._hoveredCardEl && this._hoveredCardEl !== cardEl) {
+                this.handleCardLeave(this._hoveredCardEl, this._hoveredCard);
+                this._hoveredCardEl = null;
+                this._hoveredCard = null;
+            }
+            if (!cardEl) return;
+            const card = this._cardMap?.get(cardEl.dataset.id);
+            if (!card) return;
+            this._hoveredCardEl = cardEl;
+            this._hoveredCard = card;
+            this.handleCardHover(cardEl, card,
+                { clientX: touch.clientX, clientY: touch.clientY },
+                this._cachedLayout
+            );
+        }, { passive: true });
+
+        pileEl.addEventListener('touchcancel', () => {
+            if (this._hoveredCardEl) {
+                this.handleCardLeave(this._hoveredCardEl, this._hoveredCard);
+                this._hoveredCardEl = null;
+                this._hoveredCard = null;
+            }
         });
     }
 
@@ -2617,89 +2678,24 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 500);
 });
 
-// ==================== 调试工具函数 ====================
-
-/**
- * 调试工具：查看卡片覆盖关系
- */
-function debugCoverage() {
-    console.log('=== 卡片覆盖关系调试 ===');
-
-    let totalCards = 0;
-    let visibleCards = 0;
-    let coveredCards = 0;
-
-    game.state.deck.forEach(card => {
-        if (card && !card.removed) {
-            totalCards++;
-            if (card.visible) {
-                visibleCards++;
-            } else {
-                coveredCards++;
-            }
-        }
-    });
-
-    console.log(`总卡片: ${totalCards}`);
-    console.log(`可见: ${visibleCards} (${(visibleCards / totalCards * 100).toFixed(1)}%)`);
-    console.log(`被覆盖: ${coveredCards} (${(coveredCards / totalCards * 100).toFixed(1)}%)`);
-
-    return { totalCards, visibleCards, coveredCards };
-}
-
-/**
- * 调试工具：查看偏移卡片
- */
-function debugOffsetCards() {
-    const offsetCards = game.state.deck.filter(card =>
-        card && (card.row % 1 !== 0 || card.col % 1 !== 0)
-    );
-
-    console.log('=== 偏移卡片统计 ===');
-    console.log(`偏移卡片数量: ${offsetCards.length}`);
-    console.log(`总卡片数量: ${game.state.deck.length}`);
-    console.log(`偏移比例: ${(offsetCards.length / game.state.deck.length * 100).toFixed(1)}%`);
-
-    console.log('\n前5个偏移卡片:');
-    offsetCards.slice(0, 5).forEach(card => {
-        console.log(`  ${card.id}: 位置(${card.row}, ${card.col}), 层级${card.layer}, ${card.visible ? '可见' : '被覆盖'}`);
-    });
-
-    return offsetCards;
-}
-
-/**
- * 调试工具：测试特定卡片的覆盖情况
- */
-function debugCardCoverage(cardId) {
-    const card = game.findCardById(cardId);
-    if (!card) {
-        console.log('卡片未找到:', cardId);
-        return;
-    }
-
-    console.log('=== 卡片详情 ===');
-    console.log(`ID: ${card.id}`);
-    console.log(`位置: (${card.row}, ${card.col})`);
-    console.log(`层级: ${card.layer}`);
-    console.log(`类型: ${card.type}`);
-    console.log(`状态: ${card.visible ? '可见✓' : '被覆盖✗'}`);
-
-    // 检查是哪张卡片覆盖了它
-    if (!card.visible && !card.removed) {
-        console.log('\n被以下卡片覆盖:');
-        game.state.deck.forEach(upperCard => {
-            if (!upperCard || upperCard.removed) return;
-            if (upperCard.layer <= card.layer) return;
-
-            if (game.checkCardsOverlap(card, upperCard)) {
-                console.log(`  - ${upperCard.id}: 位置(${upperCard.row}, ${upperCard.col}), 层级${upperCard.layer}`);
+// ==================== 调试工具函数（仅开发环境） ====================
+if (typeof window !== 'undefined' && window.location && window.location.hostname === 'localhost') {
+    window.debugCoverage = function () {
+        let totalCards = 0, visibleCards = 0, coveredCards = 0;
+        game.state.deck.forEach(card => {
+            if (card && !card.removed) {
+                totalCards++;
+                if (card.visible) visibleCards++;
+                else coveredCards++;
             }
         });
-    }
-}
+        console.log(`总卡片: ${totalCards}, 可见: ${visibleCards}, 被覆盖: ${coveredCards}`);
+        return { totalCards, visibleCards, coveredCards };
+    };
 
-console.log('💡 调试工具已加载！');
-console.log('使用 debugCoverage() 查看覆盖统计');
-console.log('使用 debugOffsetCards() 查看偏移卡片');
-console.log('使用 debugCardCoverage("card-id") 查看特定卡片');
+    window.debugCardCoverage = function (cardId) {
+        const card = game.findCardById(cardId);
+        if (!card) { console.log('卡片未找到:', cardId); return; }
+        console.log(`${card.id}: (${card.row}, ${card.col}) 层级${card.layer} ${card.visible ? '可见✓' : '被覆盖✗'}`);
+    };
+}

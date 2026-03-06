@@ -8,7 +8,7 @@
 const http = require('http');
 const path = require('path');
 const fs = require('fs');
-const { exec } = require('child_process');
+const { execFile } = require('child_process');
 const { Server } = require('socket.io');
 
 const mimeTypes = {
@@ -163,7 +163,8 @@ const server = http.createServer((req, res) => {
         if (error) {
             if (error.code === 'ENOENT') {
                 res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
-                res.end('<h1>404 - 文件未找到</h1><p>尝试访问: ' + escapeHtml(filePath) + '</p>', 'utf-8');
+                const safePath = dev ? escapeHtml(filePath) : escapeHtml(urlPath);
+                res.end('<h1>404 - 文件未找到</h1><p>尝试访问: ' + safePath + '</p>', 'utf-8');
             } else {
                 res.writeHead(500);
                 res.end(`服务器错误: ${error.code}`, 'utf-8');
@@ -179,274 +180,281 @@ const server = http.createServer((req, res) => {
     });
 });
 
-    // 挂载 Socket.IO
-    const io = new Server(server, {
-        path: '/socket.io',
-        cors: {
-            origin: '*',
-            methods: ['GET', 'POST']
-        }
+// 挂载 Socket.IO
+const io = new Server(server, {
+    path: '/socket.io',
+    cors: {
+        origin: '*',
+        methods: ['GET', 'POST']
+    }
+});
+
+io.on('connection', (socket) => {
+    console.log(`[Socket] 玩家连接: ${socket.id}`);
+    socket.join(LOBBY);
+
+    socket.on('getRoomList', () => {
+        socket.emit('roomList', getRoomListForSocket(io, socket.id));
     });
 
-    io.on('connection', (socket) => {
-        console.log(`[Socket] 玩家连接: ${socket.id}`);
-        socket.join(LOBBY);
-
-        socket.on('getRoomList', () => {
-            socket.emit('roomList', getRoomListForSocket(io, socket.id));
+    socket.on('createRoom', () => {
+        leaveOtherGameRooms(io, socket, null);
+        const roomId = randomRoomId();
+        rooms.set(roomId, {
+            black: socket.id,
+            white: null,
+            spectators: new Set(),
+            board: createEmptyBoard(),
+            moveHistory: [],
+            currentTurn: 'black',
+            gameOver: false,
+            disconnectTimeout: null
         });
+        socket.join(roomId);
+        console.log(`[Room] 房间创建成功: ${roomId}, 创建者: ${socket.id}`);
+        socket.emit('roomCreated', { roomId });
+        broadcastRoomList(io);
+    });
 
-        socket.on('createRoom', () => {
-            leaveOtherGameRooms(io, socket, null);
-            const roomId = randomRoomId();
-            rooms.set(roomId, {
-                black: socket.id,
-                white: null,
-                spectators: new Set(),
-                board: createEmptyBoard(),
-                moveHistory: [],
-                currentTurn: 'black',
-                gameOver: false,
-                disconnectTimeout: null
-            });
-            socket.join(roomId);
-            console.log(`[Room] 房间创建成功: ${roomId}, 创建者: ${socket.id}`);
-            socket.emit('roomCreated', { roomId });
+    socket.on('joinRoom', ({ roomId }) => {
+        leaveOtherGameRooms(io, socket, roomId);
+        const room = rooms.get(roomId);
+        if (!room) {
+            socket.emit('error', { message: '房间不存在' });
+            return;
+        }
+
+        if (!isSocketConnected(io, room.black)) {
+            rooms.delete(roomId);
+            socket.emit('error', { message: '房间创建者已离开，房间已失效' });
             broadcastRoomList(io);
-        });
+            return;
+        }
+        if (room.white && !isSocketConnected(io, room.white)) {
+            room.white = null;
+        }
 
-        socket.on('joinRoom', ({ roomId }) => {
-            leaveOtherGameRooms(io, socket, roomId);
-            const room = rooms.get(roomId);
-            if (!room) {
-                socket.emit('error', { message: '房间不存在' });
-                return;
-            }
+        if (room.disconnectTimeout) {
+            clearTimeout(room.disconnectTimeout);
+            room.disconnectTimeout = null;
+        }
 
-            if (!isSocketConnected(io, room.black)) {
-                rooms.delete(roomId);
-                socket.emit('error', { message: '房间创建者已离开，房间已失效' });
-                broadcastRoomList(io);
-                return;
-            }
-            if (room.white && !isSocketConnected(io, room.white)) {
-                room.white = null;
-            }
-
-            if (room.disconnectTimeout) {
-                clearTimeout(room.disconnectTimeout);
-                room.disconnectTimeout = null;
-            }
-
-            if (room.black === socket.id || room.white === socket.id) {
-                socket.join(roomId);
-                socket.emit('roomJoined', { roomId, role: room.black === socket.id ? 'black' : 'white' });
-                const payload = {
-                    board: room.board,
-                    moveHistory: room.moveHistory,
-                    currentTurn: room.currentTurn,
-                    hasOpponent: !!room.white
-                };
-                socket.emit('gameStart', payload);
-                broadcastRoomList(io);
-                return;
-            }
-
-            if (!room.white) {
-                room.white = socket.id;
-                socket.join(roomId);
-                socket.emit('roomJoined', { roomId, role: 'white' });
-                const payload = {
-                    board: room.board,
-                    moveHistory: room.moveHistory,
-                    currentTurn: room.currentTurn,
-                    hasOpponent: true
-                };
-                io.to(roomId).emit('gameStart', payload);
-                console.log(`[Room] 玩家 ${socket.id} 作为白方加入房间 ${roomId}`);
-            } else {
-                socket.emit('error', { message: '房间已有两名玩家，请选择观战' });
-            }
-            broadcastRoomList(io);
-        });
-
-        socket.on('spectateRoom', ({ roomId }) => {
-            leaveOtherGameRooms(io, socket, roomId);
-            const room = rooms.get(roomId);
-            if (!room) {
-                socket.emit('error', { message: '房间不存在' });
-                return;
-            }
-            if (!isSocketConnected(io, room.black) || (room.white && !isSocketConnected(io, room.white))) {
-                if (!isSocketConnected(io, room.black)) rooms.delete(roomId);
-                socket.emit('error', { message: '房间玩家已离开，无法观战' });
-                broadcastRoomList(io);
-                return;
-            }
-            room.spectators.add(socket.id);
+        if (room.black === socket.id || room.white === socket.id) {
             socket.join(roomId);
-            socket.emit('roomJoined', { roomId, role: 'spectator' });
+            socket.emit('roomJoined', { roomId, role: room.black === socket.id ? 'black' : 'white' });
             const payload = {
                 board: room.board,
                 moveHistory: room.moveHistory,
                 currentTurn: room.currentTurn,
-                gameOver: room.gameOver || false,
-                winner: room.winner || null
+                hasOpponent: !!room.white
             };
             socket.emit('gameStart', payload);
             broadcastRoomList(io);
-            console.log(`[Room] 玩家 ${socket.id} 观战加入房间 ${roomId}`);
-        });
+            return;
+        }
 
-        socket.on('move', ({ row, col, color }) => {
-            const roomId = Array.from(socket.rooms).find(r => r !== socket.id && r !== LOBBY && rooms.has(r));
-            if (!roomId || !rooms.has(roomId)) return;
-            const room = rooms.get(roomId);
-            if (!room || room.gameOver) return;
-            if (!room.white) return;
-            if (room.spectators && room.spectators.has(socket.id)) return;
-            if (typeof row !== 'number' || typeof col !== 'number' ||
-                row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE) return;
-            if (room.board[row][col] !== EMPTY) return;
-            const turnColor = room.currentTurn;
-            if (color !== turnColor) return;
-            const num = color === 'black' ? BLACK : WHITE;
-            room.board[row][col] = num;
-            room.moveHistory.push({ r: row, c: col, color: num });
-            room.currentTurn = color === 'black' ? 'white' : 'black';
-
-            const won = checkWin(room.board, row, col, num);
-            io.to(roomId).emit('move', { row, col, color });
-
-            if (won) {
-                room.gameOver = true;
-                room.winner = color;
-                io.to(roomId).emit('gameOver', { winner: color, reason: 'win' });
-            } else if (isBoardFull(room.board)) {
-                room.gameOver = true;
-                room.winner = 'draw';
-                io.to(roomId).emit('gameOver', { winner: 'draw', reason: 'draw' });
-            }
-        });
-
-        socket.on('undoRequest', ({ roomId }) => {
-            socket.to(roomId).emit('undoRequest');
-        });
-
-        socket.on('undoAccept', ({ roomId }) => {
-            if (!rooms.has(roomId) || !socket.rooms.has(roomId)) return;
-            const room = rooms.get(roomId);
-            if (!room || room.gameOver || room.moveHistory.length < 2) return;
-            const m2 = room.moveHistory.pop();
-            const m1 = room.moveHistory.pop();
-            room.board[m1.r][m1.c] = EMPTY;
-            room.board[m2.r][m2.c] = EMPTY;
-            room.gameOver = false;
-            // 回退轮次到第一步走棋者的颜色
-            room.currentTurn = m1.color === BLACK ? 'black' : 'white';
-            io.to(roomId).emit('undoAccept', {
+        if (!room.white) {
+            room.white = socket.id;
+            socket.join(roomId);
+            socket.emit('roomJoined', { roomId, role: 'white' });
+            const payload = {
                 board: room.board,
                 moveHistory: room.moveHistory,
-                currentTurn: room.currentTurn
-            });
-        });
+                currentTurn: room.currentTurn,
+                hasOpponent: true
+            };
+            io.to(roomId).emit('gameStart', payload);
+            console.log(`[Room] 玩家 ${socket.id} 作为白方加入房间 ${roomId}`);
+        } else {
+            socket.emit('error', { message: '房间已有两名玩家，请选择观战' });
+        }
+        broadcastRoomList(io);
+    });
 
-        socket.on('undoReject', ({ roomId }) => {
-            socket.to(roomId).emit('undoReject');
-        });
+    socket.on('spectateRoom', ({ roomId }) => {
+        leaveOtherGameRooms(io, socket, roomId);
+        const room = rooms.get(roomId);
+        if (!room) {
+            socket.emit('error', { message: '房间不存在' });
+            return;
+        }
+        if (!isSocketConnected(io, room.black) || (room.white && !isSocketConnected(io, room.white))) {
+            if (!isSocketConnected(io, room.black)) rooms.delete(roomId);
+            socket.emit('error', { message: '房间玩家已离开，无法观战' });
+            broadcastRoomList(io);
+            return;
+        }
+        room.spectators.add(socket.id);
+        socket.join(roomId);
+        socket.emit('roomJoined', { roomId, role: 'spectator' });
+        const payload = {
+            board: room.board,
+            moveHistory: room.moveHistory,
+            currentTurn: room.currentTurn,
+            gameOver: room.gameOver || false,
+            winner: room.winner || null
+        };
+        socket.emit('gameStart', payload);
+        broadcastRoomList(io);
+        console.log(`[Room] 玩家 ${socket.id} 观战加入房间 ${roomId}`);
+    });
 
-        socket.on('resign', ({ roomId }) => {
-            if (!rooms.has(roomId) || !socket.rooms.has(roomId)) return;
-            const room = rooms.get(roomId);
-            if (!room || room.gameOver) return;
-            if (room.spectators && room.spectators.has(socket.id)) return;
-            const winner = room.black === socket.id ? 'white' : 'black';
+    socket.on('move', ({ row, col, color }) => {
+        const roomId = Array.from(socket.rooms).find(r => r !== socket.id && r !== LOBBY && rooms.has(r));
+        if (!roomId || !rooms.has(roomId)) return;
+        const room = rooms.get(roomId);
+        if (!room || room.gameOver) return;
+        if (!room.white) return;
+        if (room.spectators && room.spectators.has(socket.id)) return;
+        if (typeof row !== 'number' || typeof col !== 'number' ||
+            row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE) return;
+        if (room.board[row][col] !== EMPTY) return;
+        const turnColor = room.currentTurn;
+        if (color !== turnColor) return;
+        const num = color === 'black' ? BLACK : WHITE;
+        room.board[row][col] = num;
+        room.moveHistory.push({ r: row, c: col, color: num });
+        room.currentTurn = color === 'black' ? 'white' : 'black';
+
+        const won = checkWin(room.board, row, col, num);
+        io.to(roomId).emit('move', { row, col, color });
+
+        if (won) {
             room.gameOver = true;
-            room.winner = winner;
-            io.to(roomId).emit('gameOver', { winner, reason: 'resign' });
-        });
+            room.winner = color;
+            io.to(roomId).emit('gameOver', { winner: color, reason: 'win' });
+        } else if (isBoardFull(room.board)) {
+            room.gameOver = true;
+            room.winner = 'draw';
+            io.to(roomId).emit('gameOver', { winner: 'draw', reason: 'draw' });
+        }
+    });
 
-        socket.on('leaveRoom', ({ roomId }) => {
-            if (!roomId) return;
-            const room = rooms.get(roomId);
-            const isSpectator = room && room.spectators && room.spectators.has(socket.id);
-            socket.leave(roomId);
-            if (room) {
-                if (isSpectator) {
-                    room.spectators.delete(socket.id);
-                } else {
-                    const delay = room.gameOver ? 1500 : 0;
-                    const doLeave = () => {
-                        socket.to(roomId).emit('opponentLeft');
-                        if (room.disconnectTimeout) clearTimeout(room.disconnectTimeout);
-                        rooms.delete(roomId);
-                        broadcastRoomList(io);
-                    };
-                    if (delay > 0) setTimeout(doLeave, delay);
-                    else doLeave();
-                }
-            }
-        });
+    socket.on('undoRequest', ({ roomId }) => {
+        socket.to(roomId).emit('undoRequest');
+    });
 
-        socket.on('disconnect', () => {
-            socket.leave(LOBBY);
-            for (const [rid, room] of rooms.entries()) {
-                if (room.spectators && room.spectators.has(socket.id)) {
-                    room.spectators.delete(socket.id);
-                    broadcastRoomList(io);
-                    break;
-                }
-                if (room.black === socket.id || room.white === socket.id) {
-                    room.disconnectTimeout = setTimeout(() => {
-                        io.to(rid).emit('opponentLeft');
-                        rooms.delete(rid);
-                        broadcastRoomList(io);
-                    }, 30000);
-                    break;
-                }
-            }
+    socket.on('undoAccept', ({ roomId }) => {
+        if (!rooms.has(roomId) || !socket.rooms.has(roomId)) return;
+        const room = rooms.get(roomId);
+        if (!room || room.gameOver || room.moveHistory.length < 2) return;
+        const m2 = room.moveHistory.pop();
+        const m1 = room.moveHistory.pop();
+        room.board[m1.r][m1.c] = EMPTY;
+        room.board[m2.r][m2.c] = EMPTY;
+        room.gameOver = false;
+        // 回退轮次到第一步走棋者的颜色
+        room.currentTurn = m1.color === BLACK ? 'black' : 'white';
+        io.to(roomId).emit('undoAccept', {
+            board: room.board,
+            moveHistory: room.moveHistory,
+            currentTurn: room.currentTurn
         });
     });
 
-    server.listen(PORT, HOST, () => {
-        const displayHost = HOST === '0.0.0.0' ? 'localhost' : HOST;
-        const url = `http://${displayHost}:${PORT}`;
+    socket.on('undoReject', ({ roomId }) => {
+        socket.to(roomId).emit('undoReject');
+    });
 
-        console.log('='.repeat(60));
-        console.log('🎮 游戏大厅 - Next.js + 五子棋联机');
-        console.log('='.repeat(60));
-        console.log(`✅ 服务器已启动！`);
-        console.log(`📡 访问地址: ${url}`);
-        console.log(`⚡ 模式: ${dev ? '开发' : '生产'}`);
-        console.log(`⚡ 按 Ctrl+C 停止服务器`);
-        console.log('='.repeat(60));
+    socket.on('resign', ({ roomId }) => {
+        if (!rooms.has(roomId) || !socket.rooms.has(roomId)) return;
+        const room = rooms.get(roomId);
+        if (!room || room.gameOver) return;
+        if (room.spectators && room.spectators.has(socket.id)) return;
+        const winner = room.black === socket.id ? 'white' : 'black';
+        room.gameOver = true;
+        room.winner = winner;
+        io.to(roomId).emit('gameOver', { winner, reason: 'resign' });
+    });
+
+    socket.on('leaveRoom', ({ roomId }) => {
+        if (!roomId) return;
+        const room = rooms.get(roomId);
+        const isSpectator = room && room.spectators && room.spectators.has(socket.id);
+        socket.leave(roomId);
+        if (room) {
+            if (isSpectator) {
+                room.spectators.delete(socket.id);
+            } else {
+                const delay = room.gameOver ? 1500 : 0;
+                const doLeave = () => {
+                    socket.to(roomId).emit('opponentLeft');
+                    if (room.disconnectTimeout) clearTimeout(room.disconnectTimeout);
+                    rooms.delete(roomId);
+                    broadcastRoomList(io);
+                };
+                if (delay > 0) setTimeout(doLeave, delay);
+                else doLeave();
+            }
+        }
+    });
+
+    socket.on('disconnect', () => {
+        socket.leave(LOBBY);
+        for (const [rid, room] of rooms.entries()) {
+            if (room.spectators && room.spectators.has(socket.id)) {
+                room.spectators.delete(socket.id);
+                broadcastRoomList(io);
+                break;
+            }
+            if (room.black === socket.id || room.white === socket.id) {
+                room.disconnectTimeout = setTimeout(() => {
+                    io.to(rid).emit('opponentLeft');
+                    rooms.delete(rid);
+                    broadcastRoomList(io);
+                }, 30000);
+                break;
+            }
+        }
+    });
+});
+
+server.listen(PORT, HOST, () => {
+    const displayHost = HOST === '0.0.0.0' ? 'localhost' : HOST;
+    const url = `http://${displayHost}:${PORT}`;
+
+    console.log('='.repeat(60));
+    console.log('🎮 游戏大厅 - Next.js + 五子棋联机');
+    console.log('='.repeat(60));
+    console.log(`✅ 服务器已启动！`);
+    console.log(`📡 访问地址: ${url}`);
+    console.log(`⚡ 模式: ${dev ? '开发' : '生产'}`);
+    console.log(`⚡ 按 Ctrl+C 停止服务器`);
+    console.log('='.repeat(60));
 
         try {
-            const start = process.platform === 'darwin' ? 'open' :
-                process.platform === 'win32' ? 'start' : 'xdg-open';
-            exec(`${start} ${url}`, (err) => {
-                if (!err) {
-                    console.log('🌐 已自动打开浏览器');
-                } else {
-                    console.log(`💡 请手动在浏览器中打开: ${url}`);
-                }
-            });
+            if (process.platform === 'darwin') {
+                execFile('open', [url], (err) => {
+                    if (!err) console.log('🌐 已自动打开浏览器');
+                    else console.log(`💡 请手动在浏览器中打开: ${url}`);
+                });
+            } else if (process.platform === 'win32') {
+                execFile('cmd', ['/c', 'start', '', url], (err) => {
+                    if (!err) console.log('🌐 已自动打开浏览器');
+                    else console.log(`💡 请手动在浏览器中打开: ${url}`);
+                });
+            } else {
+                execFile('xdg-open', [url], (err) => {
+                    if (!err) console.log('🌐 已自动打开浏览器');
+                    else console.log(`💡 请手动在浏览器中打开: ${url}`);
+                });
+            }
         } catch (e) {
             console.log(`💡 请手动在浏览器中打开: ${url}`);
         }
 
-        console.log('\n🎮 游戏服务运行中...\n');
-    });
+    console.log('\n🎮 游戏服务运行中...\n');
+});
 
-    server.on('error', (error) => {
-        if (error.code === 'EADDRINUSE') {
-            console.error(`❌ 端口 ${PORT} 已被占用`);
-            console.error('💡 请尝试其他端口或关闭占用该端口的程序');
-        } else {
-            console.error(`❌ 服务器错误: ${error.message}`);
-        }
-        process.exit(1);
-    });
+server.on('error', (error) => {
+    if (error.code === 'EADDRINUSE') {
+        console.error(`❌ 端口 ${PORT} 已被占用`);
+        console.error('💡 请尝试其他端口或关闭占用该端口的程序');
+    } else {
+        console.error(`❌ 服务器错误: ${error.message}`);
+    }
+    process.exit(1);
+});
 
 process.on('SIGINT', () => {
     console.log('\n\n⛔ 服务器已停止');
