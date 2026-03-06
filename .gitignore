@@ -34,7 +34,8 @@ yarn-error.log*
 node_modules/
 bower_components/
 
-# 构建输出（如果将来添加）
+# 构建输出
+.next/
 dist/
 build/
 out/

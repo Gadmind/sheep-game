@@ -126,16 +126,434 @@
         return true;
     }
 
-    // AI 计算统一委托给 gomoku-core.js（GOMOKU_CORE），避免重复代码
+    function getEmptyCells() {
+        const cells = [];
+        for (let i = 0; i < BOARD_SIZE; i++)
+            for (let j = 0; j < BOARD_SIZE; j++)
+                if (board[i][j] === EMPTY) cells.push({ r: i, c: j });
+        return cells;
+    }
+
+    /** 获取候选落子点：有子时只考虑已有棋子周围 2 格内的空位，否则返回天元附近 */
+    function getCandidateCells(radius) {
+        radius = radius || 2;
+        const hasStone = [];
+        for (let i = 0; i < BOARD_SIZE; i++)
+            for (let j = 0; j < BOARD_SIZE; j++)
+                if (board[i][j] !== EMPTY) hasStone.push({ r: i, c: j });
+        if (hasStone.length === 0) {
+            const center = Math.floor(BOARD_SIZE / 2);
+            const out = [];
+            for (let dr = -1; dr <= 1; dr++)
+                for (let dc = -1; dc <= 1; dc++)
+                    if (board[center + dr] && board[center + dr][center + dc] === EMPTY)
+                        out.push({ r: center + dr, c: center + dc });
+            return out.length ? out : [{ r: center, c: center }];
+        }
+        const set = new Set();
+        for (const { r, c } of hasStone) {
+            for (let dr = -radius; dr <= radius; dr++)
+                for (let dc = -radius; dc <= radius; dc++) {
+                    const nr = r + dr, nc = c + dc;
+                    if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE && board[nr][nc] === EMPTY)
+                        set.add(nr * BOARD_SIZE + nc);
+                }
+        }
+        const list = Array.from(set).map(key => ({ r: (key / BOARD_SIZE) | 0, c: key % BOARD_SIZE }));
+        return list.length ? list : getEmptyCells();
+    }
+
+    // ----- AI 评估：单条线得分（五连/活四/冲四/活三/双三等），权重大幅提高 -----
+    function scoreLine(arr, color) {
+        const opp = color === BLACK ? WHITE : BLACK;
+        let score = 0;
+        let i = 0;
+        while (i < arr.length) {
+            if (arr[i] !== color) { i++; continue; }
+            let count = 0;
+            const start = i;
+            while (i < arr.length && arr[i] === color) { count++; i++; }
+            const leftBlock = (start - 1 < 0) || (arr[start - 1] === opp);
+            const rightBlock = (i >= arr.length) || (arr[i] === opp);
+            const blocked = (leftBlock ? 1 : 0) + (rightBlock ? 1 : 0);
+            if (count >= 5) score += 500000;
+            else if (count === 4) score += blocked === 0 ? 80000 : (blocked === 1 ? 8000 : 0);
+            else if (count === 3) score += blocked === 0 ? 8000 : (blocked === 1 ? 800 : 0);
+            else if (count === 2) score += blocked === 0 ? 800 : (blocked === 1 ? 80 : 0);
+            else if (count === 1) score += blocked === 0 ? 80 : 8;
+        }
+        return score;
+    }
+
+    function evaluateBoard(color) {
+        let total = 0;
+        for (let i = 0; i < BOARD_SIZE; i++) {
+            total += scoreLine(board[i].slice(), color);
+            total += scoreLine(board.map(r => r[i]), color);
+        }
+        for (let d = -BOARD_SIZE; d <= BOARD_SIZE; d++) {
+            const diag = [], anti = [];
+            for (let i = 0; i < BOARD_SIZE; i++) {
+                const j = i + d;
+                if (j >= 0 && j < BOARD_SIZE) diag.push(board[i][j]);
+                const k = BOARD_SIZE - 1 - i + d;
+                if (k >= 0 && k < BOARD_SIZE) anti.push(board[i][k]);
+            }
+            if (diag.length >= 5) total += scoreLine(diag, color);
+            if (anti.length >= 5) total += scoreLine(anti, color);
+        }
+        return total;
+    }
+
+    /** 位置分：偏好天元及星位 */
+    function positionScore(r, c) {
+        const center = BOARD_SIZE / 2 - 0.5;
+        const d = Math.abs(r - center) + Math.abs(c - center);
+        return Math.max(0, 15 - d);
+    }
+
+    /** 检测某色在 (r,c) 落子后是否成五 */
+    function wouldWin(r, c, color) {
+        if (board[r][c] !== EMPTY) return false;
+        board[r][c] = color;
+        const win = checkWin(r, c, color);
+        board[r][c] = EMPTY;
+        return win;
+    }
+
+    /** 检测某色在 (r,c) 落子后是否形成活四（四子两端空） */
+    function wouldOpenFour(r, c, color) {
+        if (board[r][c] !== EMPTY) return false;
+        const dr = [0, 1, 1, 1];
+        const dc = [1, 0, 1, -1];
+        board[r][c] = color;
+        for (let d = 0; d < 4; d++) {
+            let count = 1;
+            let nr = r + dr[d], nc = c + dc[d];
+            while (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE && board[nr][nc] === color) {
+                count++;
+                nr += dr[d];
+                nc += dc[d];
+            }
+            const leftEmpty = (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE && board[nr][nc] === EMPTY);
+            nr = r - dr[d];
+            nc = c - dc[d];
+            while (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE && board[nr][nc] === color) {
+                count++;
+                nr -= dr[d];
+                nc -= dc[d];
+            }
+            const rightEmpty = (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE && board[nr][nc] === EMPTY);
+            if (count >= 4 && leftEmpty && rightEmpty) {
+                board[r][c] = EMPTY;
+                return true;
+            }
+        }
+        board[r][c] = EMPTY;
+        return false;
+    }
+
+    /** 检测某色在 (r,c) 落子后是否形成活三（三子两端空，下一手可活四） */
+    function wouldOpenThree(r, c, color) {
+        if (board[r][c] !== EMPTY) return false;
+        const dr = [0, 1, 1, 1];
+        const dc = [1, 0, 1, -1];
+        board[r][c] = color;
+        for (let d = 0; d < 4; d++) {
+            let count = 1;
+            let nr = r + dr[d], nc = c + dc[d];
+            while (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE && board[nr][nc] === color) {
+                count++;
+                nr += dr[d];
+                nc += dc[d];
+            }
+            const leftEmpty = (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE && board[nr][nc] === EMPTY);
+            nr = r - dr[d];
+            nc = c - dc[d];
+            while (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE && board[nr][nc] === color) {
+                count++;
+                nr -= dr[d];
+                nc -= dc[d];
+            }
+            const rightEmpty = (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE && board[nr][nc] === EMPTY);
+            if (count === 3 && leftEmpty && rightEmpty) {
+                board[r][c] = EMPTY;
+                return true;
+            }
+        }
+        board[r][c] = EMPTY;
+        return false;
+    }
+
+    /** 单步评估差（用于排序），不恢复 winner */
+    function quickEval(color) {
+        const opp = color === BLACK ? WHITE : BLACK;
+        return evaluateBoard(color) - evaluateBoard(opp);
+    }
+
+    /** 简单：必防成五/活四/活三，其余评估选最优 */
+    function aiEasy() {
+        const cells = getCandidateCells(2);
+        if (cells.length === 0) return getEmptyCells().length ? getEmptyCells()[0] : null;
+        const aiColor = currentTurn;
+        const oppColor = aiColor === BLACK ? WHITE : BLACK;
+        const mustBlock = [];
+        for (const { r, c } of cells) {
+            if (wouldWin(r, c, oppColor)) mustBlock.push({ r, c });
+        }
+        if (mustBlock.length > 0) return mustBlock[0];
+        const blockOpenFour = [];
+        for (const { r, c } of cells) {
+            if (wouldOpenFour(r, c, oppColor)) blockOpenFour.push({ r, c });
+        }
+        if (blockOpenFour.length > 0) {
+            let best = blockOpenFour[0], bestS = -Infinity;
+            for (const cell of blockOpenFour) {
+                board[cell.r][cell.c] = aiColor;
+                const s = quickEval(aiColor) + positionScore(cell.r, cell.c);
+                board[cell.r][cell.c] = EMPTY;
+                if (s > bestS) { bestS = s; best = cell; }
+            }
+            return best;
+        }
+        const blockOpenThree = [];
+        for (const { r, c } of cells) {
+            if (wouldOpenThree(r, c, oppColor)) blockOpenThree.push({ r, c });
+        }
+        if (blockOpenThree.length > 0) {
+            let best = blockOpenThree[0], bestS = -Infinity;
+            for (const cell of blockOpenThree) {
+                board[cell.r][cell.c] = aiColor;
+                const s = quickEval(aiColor) + positionScore(cell.r, cell.c);
+                board[cell.r][cell.c] = EMPTY;
+                if (s > bestS) { bestS = s; best = cell; }
+            }
+            return best;
+        }
+        let best = null, bestScore = -Infinity;
+        for (const { r, c } of cells) {
+            board[r][c] = aiColor;
+            const s = quickEval(aiColor) + positionScore(r, c);
+            board[r][c] = EMPTY;
+            if (s > bestScore) { bestScore = s; best = { r, c }; }
+        }
+        return best || cells[0];
+    }
+
+    /** 中等：必杀/必防成五/活四 + 4 层 minimax（2 步前瞻），根候选排序取前 22 */
+    function aiMedium() {
+        const cells = getCandidateCells(2);
+        if (cells.length === 0) return getEmptyCells().length ? getEmptyCells()[0] : null;
+        const aiColor = currentTurn;
+        const oppColor = aiColor === BLACK ? WHITE : BLACK;
+        for (const { r, c } of cells) {
+            if (wouldWin(r, c, aiColor)) return { r, c };
+        }
+        const mustBlock = [];
+        for (const { r, c } of cells) {
+            if (wouldWin(r, c, oppColor)) mustBlock.push({ r, c });
+        }
+        if (mustBlock.length > 0) return mustBlock[0];
+        const blockOpenFour = [];
+        for (const { r, c } of cells) {
+            if (wouldOpenFour(r, c, oppColor)) blockOpenFour.push({ r, c });
+        }
+        if (blockOpenFour.length > 0) {
+            const prevWinner = winner;
+            let best = blockOpenFour[0], bestScore = -Infinity;
+            for (const cell of blockOpenFour) {
+                board[cell.r][cell.c] = aiColor;
+                currentTurn = oppColor;
+                const score = minimax(3, -Infinity, Infinity, false, aiColor);
+                board[cell.r][cell.c] = EMPTY;
+                winner = prevWinner;
+                currentTurn = aiColor;
+                if (score > bestScore) { bestScore = score; best = cell; }
+            }
+            winner = prevWinner;
+            return best;
+        }
+        const scored = cells.map(({ r, c }) => {
+            board[r][c] = aiColor;
+            const s = checkWin(r, c, aiColor) ? 500000 : (evaluateBoard(aiColor) - evaluateBoard(oppColor) + positionScore(r, c));
+            board[r][c] = EMPTY;
+            return { r, c, s };
+        });
+        scored.sort((a, b) => b.s - a.s);
+        const top = scored.slice(0, 22);
+        const prevWinner = winner;
+        let best = null;
+        let bestScore = -Infinity;
+        const depth = 4;
+        for (const { r, c } of top) {
+            board[r][c] = aiColor;
+            if (checkWin(r, c, aiColor)) {
+                board[r][c] = EMPTY;
+                winner = prevWinner;
+                return { r, c };
+            }
+            currentTurn = oppColor;
+            const score = minimax(depth - 1, -Infinity, Infinity, false, aiColor);
+            board[r][c] = EMPTY;
+            currentTurn = aiColor;
+            winner = prevWinner;
+            if (score > bestScore) { bestScore = score; best = { r, c }; }
+        }
+        winner = prevWinner;
+        return best || top[0] || cells[0];
+    }
+
+    function minimax(depth, alpha, beta, isMax, color) {
+        const opp = color === BLACK ? WHITE : BLACK;
+        const win = winner;
+        if (depth === 0 || win !== null) {
+            if (win === color) return 500000 - depth;
+            if (win === opp) return -500000 + depth;
+            return quickEval(color);
+        }
+        let cells = getCandidateCells(1);
+        if (cells.length === 0) return quickEval(color);
+        if (depth >= 2) {
+            const scored = cells.map(({ r, c }) => {
+                if (isMax) {
+                    board[r][c] = color;
+                    const s = checkWin(r, c, color) ? 500000 : quickEval(color);
+                    board[r][c] = EMPTY;
+                    return { r, c, s };
+                } else {
+                    board[r][c] = opp;
+                    const s = checkWin(r, c, opp) ? -500000 : quickEval(color);
+                    board[r][c] = EMPTY;
+                    return { r, c, s };
+                }
+            });
+            scored.sort((a, b) => isMax ? (b.s - a.s) : (a.s - b.s));
+            cells = scored;
+        }
+        if (isMax) {
+            let v = -Infinity;
+            for (const el of cells) {
+                const r = el.r, c = el.c;
+                board[r][c] = color;
+                const prevWin = winner;
+                if (checkWin(r, c, color)) winner = color;
+                else currentTurn = opp;
+                v = Math.max(v, minimax(depth - 1, alpha, beta, false, color));
+                board[r][c] = EMPTY;
+                winner = prevWin;
+                currentTurn = color;
+                alpha = Math.max(alpha, v);
+                if (beta <= alpha) break;
+            }
+            return v;
+        } else {
+            let v = Infinity;
+            for (const el of cells) {
+                const r = el.r, c = el.c;
+                board[r][c] = opp;
+                const prevWin = winner;
+                if (checkWin(r, c, opp)) winner = opp;
+                else currentTurn = color;
+                v = Math.min(v, minimax(depth - 1, alpha, beta, true, color));
+                board[r][c] = EMPTY;
+                winner = prevWin;
+                currentTurn = opp;
+                beta = Math.min(beta, v);
+                if (beta <= alpha) break;
+            }
+            return v;
+        }
+    }
+
+    /** 困难：必杀/必防成五/活四 + 5 层 minimax（约 2.5 步前瞻），根候选排序取前 15，内层走子排序 */
+    function aiHard() {
+        // --- 1. 开局优化：如果棋盘为空，直接下天元 ---
+        let hasAnyStone = false;
+        for (let i = 0; i < BOARD_SIZE; i++) {
+            for (let j = 0; j < BOARD_SIZE; j++) {
+                if (board[i][j] !== EMPTY) {
+                    hasAnyStone = true;
+                    break;
+                }
+            }
+            if (hasAnyStone) break;
+        }
+        if (!hasAnyStone) {
+            return { r: Math.floor(BOARD_SIZE / 2), c: Math.floor(BOARD_SIZE / 2) };
+        }
+
+        const cells = getCandidateCells(1); // 缩小到 1 格范围，极大提升速度
+        if (cells.length === 0) return getEmptyCells().length ? getEmptyCells()[0] : null;
+        const aiColor = currentTurn;
+        const oppColor = aiColor === BLACK ? WHITE : BLACK;
+        
+        // 1. 必杀检查
+        for (const { r, c } of cells) {
+            if (wouldWin(r, c, aiColor)) return { r, c };
+        }
+        // 2. 必防检查
+        const mustBlock = [];
+        for (const { r, c } of cells) {
+            if (wouldWin(r, c, oppColor)) mustBlock.push({ r, c });
+        }
+        if (mustBlock.length > 0) return mustBlock[0];
+
+        const prevWinner = winner;
+        // 3. 预评分排序
+        const scored = cells.map(({ r, c }) => {
+            board[r][c] = aiColor;
+            const s = evaluateBoard(aiColor) - evaluateBoard(oppColor) + positionScore(r, c);
+            board[r][c] = EMPTY;
+            return { r, c, s };
+        });
+        scored.sort((a, b) => b.s - a.s);
+        
+        const top = scored.slice(0, 15); // 只取前 15 个最优点进行深搜
+        const depth = 5; // 降低到 5 层，保证响应速度
+        let best = null;
+        let bestScore = -Infinity;
+
+        for (const { r, c } of top) {
+            board[r][c] = aiColor;
+            currentTurn = oppColor;
+            // 使用 alpha-beta 剪枝的 minimax
+            const score = minimax(depth - 1, -Infinity, Infinity, false, aiColor);
+            board[r][c] = EMPTY;
+            currentTurn = aiColor;
+            winner = prevWinner;
+
+            if (score > bestScore) {
+                bestScore = score;
+                best = { r, c };
+            }
+        }
+        winner = prevWinner;
+        return best || top[0] || cells[0];
+    }
+
+    /** 兜底：保证在有空位时返回一个合法落子点，避免 AI 不落子 */
     function getFallbackMove() {
-        if (window.GOMOKU_CORE) return window.GOMOKU_CORE.getFallbackMove(board);
+        try {
+            if (!board || !Array.isArray(board)) return null;
+            const cells = getCandidateCells(2);
+            if (cells && cells.length > 0) return { r: cells[0].r, c: cells[0].c };
+            const empty = getEmptyCells();
+            if (empty && empty.length > 0) return { r: empty[0].r, c: empty[0].c };
+        } catch (e) {
+            console.warn('getFallbackMove error:', e);
+        }
         return null;
     }
 
     function getAIMove() {
-        if (window.GOMOKU_CORE) {
-            const move = window.GOMOKU_CORE.getAIMove(board, difficulty, currentTurn);
+        try {
+            let move = null;
+            if (difficulty === 'easy') move = aiEasy();
+            else if (difficulty === 'medium') move = aiMedium();
+            else move = aiHard();
             if (move && typeof move.r === 'number' && typeof move.c === 'number') return move;
+        } catch (e) {
+            console.warn('AI move error:', e);
         }
         return getFallbackMove();
     }

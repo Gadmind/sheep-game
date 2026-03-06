@@ -1,33 +1,44 @@
 # 🐑 羊了个羊 - 完整实现版
 
-一个基于HTML5、CSS3和JavaScript实现的《羊了个羊》游戏，具有完整的游戏机制、道具系统和数据持久化功能。
+一个基于 Next.js、HTML5、CSS3 和 JavaScript 实现的《羊了个羊》游戏，具有完整的游戏机制、道具系统和数据持久化功能。
 
 ---
 
-## ⚡ 快速启动
+## ⚡ 快速启动（Next.js）
 
-### 🎯 Windows用户（最简单）
-
-**双击运行任一文件：**
-- `scripts/start.bat` - 自动检测环境（推荐）
-- `scripts/start-python.bat` - 使用Python
-- `scripts/start-node.bat` - 使用Node.js
-- `scripts/start-simple.bat` - 简单Python服务器
-
-### 🖥️ 命令行启动
+### 🎯 推荐方式
 
 ```bash
-# 使用Python（推荐）
-python server.py
-
-# 使用Node.js
-node server.js
-
-# 或使用简单命令
-python -m http.server 8000
+npm run dev
 ```
 
-**访问地址：** `http://localhost:8000`
+**访问地址：** `http://localhost:3000`
+
+### 🚀 Windows 一键启动
+
+双击运行 `scripts/start-node.bat` 或 `scripts/start-next.bat`
+
+### 📦 其他命令
+
+```bash
+npm run build   # 构建生产版本
+npm start       # 生产模式运行
+```
+
+---
+
+## 📌 传统启动方式（备用）
+
+如需使用旧版 HTML 直接打开：
+
+```bash
+# 使用 Python
+python -m http.server 8000
+
+# 或直接双击 index.html
+```
+
+**访问地址：** `http://localhost:8000`（Python 方式）
 
 ### 💡 更多方式
 

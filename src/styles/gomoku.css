@@ -1,0 +1,400 @@
+/* 五子棋样式 - 页面内变量 */
+.gomoku-page {
+  --primary-color: #2A2D43;
+  --board-bg: #DEB887;
+  --line-color: #5D4E37;
+  --black-stone: #1a1a1a;
+  --white-stone: #f5f5f5;
+}
+
+.gomoku-container {
+    max-width: 520px;
+    margin: 0 auto;
+    background: #F7F9FC;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    overflow: hidden;
+    padding: 20px;
+}
+
+.gomoku-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.back-link {
+    color: #666;
+    text-decoration: none;
+    font-size: 0.95rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.back-link:hover {
+    color: var(--primary-color);
+}
+
+.gomoku-header h1 {
+    font-size: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.setup-panel .mode-group,
+.setup-panel .difficulty-group,
+.setup-panel .color-group {
+    margin-bottom: 16px;
+}
+
+.mode-label,
+.difficulty-label,
+.color-label {
+    display: block;
+    font-size: 0.9rem;
+    color: #555;
+    margin-bottom: 8px;
+}
+
+.mode-btns,
+.difficulty-btns,
+.color-btns {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.mode-btn,
+.difficulty-btn,
+.color-btn {
+    padding: 10px 18px;
+    border: 2px solid #DEE2E6;
+    border-radius: 50px;
+    background: white;
+    cursor: pointer;
+    font-size: 0.95rem;
+    transition: all 0.2s;
+}
+
+.mode-btn:hover,
+.difficulty-btn:hover,
+.color-btn:hover {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+}
+
+.mode-btn.active,
+.difficulty-btn.active,
+.color-btn.active {
+    background: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+}
+
+.online-setup .room-actions {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.room-list-wrap {
+    margin-bottom: 12px;
+}
+
+.room-list-section {
+    margin-bottom: 16px;
+}
+
+.room-list-section:last-child {
+    margin-bottom: 0;
+}
+
+.room-section-title {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--primary-color);
+    margin-bottom: 8px;
+}
+
+.room-list-label {
+    display: block;
+    font-size: 0.9rem;
+    color: #555;
+    margin-bottom: 8px;
+}
+
+.connection-status {
+    font-size: 0.8rem;
+    color: #27ae60;
+}
+
+.connection-status:empty {
+    display: none;
+}
+
+.room-list {
+    list-style: none;
+    max-height: 200px;
+    overflow-y: auto;
+    border: 2px solid #DEE2E6;
+    border-radius: 8px;
+    padding: 8px;
+}
+
+.room-list-empty {
+    padding: 16px;
+    text-align: center;
+    color: #888;
+    font-size: 0.95rem;
+}
+
+.room-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    margin-bottom: 6px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    gap: 10px;
+}
+
+.room-item:last-child {
+    margin-bottom: 0;
+}
+
+.room-item-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.room-item-id {
+    font-weight: 700;
+    font-family: monospace;
+}
+
+.room-item-status {
+    font-size: 0.85rem;
+    color: #666;
+}
+
+.room-item-status.waiting {
+    color: #27ae60;
+}
+
+.room-item-status.playing {
+    color: #e67e22;
+}
+
+.room-item-btns {
+    display: flex;
+    gap: 6px;
+}
+
+.room-item-btns .btn {
+    padding: 6px 12px;
+    font-size: 0.85rem;
+}
+
+.spectator-notice {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 12px;
+    background: #e8f4f8;
+    border-radius: 8px;
+    margin-top: 12px;
+    font-size: 0.95rem;
+    color: #555;
+}
+
+.spectator-notice .btn-sm {
+    padding: 6px 14px;
+    font-size: 0.85rem;
+}
+
+.room-info {
+    padding: 12px;
+    background: #e8f4f8;
+    border-radius: 8px;
+    margin-bottom: 12px;
+}
+
+.room-info p {
+    margin-bottom: 4px;
+    font-size: 0.95rem;
+}
+
+.btn-start {
+    margin-top: 16px;
+    width: 100%;
+    padding: 14px;
+}
+
+.gomoku-container .btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 50px;
+    font-size: 0.95rem;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.2s;
+}
+
+.gomoku-container .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.gomoku-container .btn-primary {
+    background: var(--primary-color);
+    color: white;
+}
+
+.gomoku-container .btn-primary:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+}
+
+.gomoku-container .btn-secondary {
+    background: white;
+    color: var(--primary-color);
+    border: 2px solid #DEE2E6;
+}
+
+.gomoku-container .btn-secondary:hover {
+    border-color: var(--primary-color);
+}
+
+.gomoku-container .btn-danger {
+    background: #EF476F;
+    color: white;
+}
+
+.gomoku-container .btn-danger:hover {
+    background: #d63557;
+}
+
+.game-panel {
+    padding-top: 8px;
+}
+
+.game-room-info {
+    text-align: center;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    background: #e8f4f8;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    color: #555;
+}
+
+.game-room-info strong {
+    font-family: monospace;
+    color: var(--primary-color);
+}
+
+.status-bar {
+    text-align: center;
+    margin-bottom: 12px;
+    font-size: 1.05rem;
+}
+
+.game-status {
+    font-weight: 700;
+}
+
+.turn-indicator {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    margin-left: 8px;
+    vertical-align: middle;
+}
+
+.turn-indicator.black { background: #1a1a1a; }
+.turn-indicator.white { background: #f5f5f5; border: 1px solid #ccc; }
+
+.board-wrap {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 16px;
+    background: #DEB887;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: inset 0 0 20px rgba(0,0,0,0.1);
+}
+
+#gomoku-board {
+    display: block;
+    cursor: pointer;
+}
+
+.action-btns {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.gomoku-container .modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.gomoku-container .modal-content {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    max-width: 90%;
+    overflow: hidden;
+}
+
+.gomoku-container .modal-sm {
+    width: 320px;
+}
+
+.gomoku-container .modal-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid #eee;
+}
+
+.gomoku-container .modal-header h2 {
+    font-size: 1.2rem;
+}
+
+.gomoku-container .modal-body {
+    padding: 20px;
+}
+
+.gomoku-container .modal-body p {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.gomoku-container .modal-footer {
+    padding: 16px 20px;
+    border-top: 1px solid #eee;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
