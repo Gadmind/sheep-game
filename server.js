@@ -131,12 +131,23 @@ function leaveOtherGameRooms(socket, excludeRoomId) {
     }
 }
 
+function escapeHtml(str) {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 // 创建 HTTP 服务器
 const server = http.createServer((req, res) => {
-    // 移除查询参数
     const urlPath = req.url.split('?')[0];
     let filePath = path.join(__dirname, urlPath === '/' ? 'index.html' : urlPath);
-    
+
+    // 防止路径遍历攻击：确保文件路径在项目目录内
+    const resolvedPath = path.resolve(filePath);
+    if (!resolvedPath.startsWith(path.resolve(__dirname) + path.sep) && resolvedPath !== path.resolve(__dirname)) {
+        res.writeHead(403, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end('<h1>403 - 禁止访问</h1>', 'utf-8');
+        return;
+    }
+
     const extname = String(path.extname(filePath)).toLowerCase();
     const mimeType = mimeTypes[extname] || 'application/octet-stream';
 
@@ -144,7 +155,7 @@ const server = http.createServer((req, res) => {
         if (error) {
             if (error.code === 'ENOENT') {
                 res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
-                res.end('<h1>404 - 文件未找到</h1><p>尝试访问: ' + filePath + '</p>', 'utf-8');
+                res.end('<h1>404 - 文件未找到</h1><p>尝试访问: ' + escapeHtml(filePath) + '</p>', 'utf-8');
             } else {
                 res.writeHead(500);
                 res.end(`服务器错误: ${error.code}`, 'utf-8');

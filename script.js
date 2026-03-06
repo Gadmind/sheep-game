@@ -964,33 +964,6 @@ class SheepGame {
     }
 
     /**
-     * 生成所有有效位置（优化版）
-     * 确保生成的位置分布合理且不重复
-     */
-    generateAllValidPositions(layers, rows, cols) {
-        const positions = [];
-        const density = 0.6; // 每层填充密度
-
-        for (let layer = 0; layer < layers; layer++) {
-            const positionsInLayer = Math.floor(rows * cols * density);
-            const layerPositions = [];
-
-            // 生成当前层的所有可能位置
-            for (let r = 0; r < rows; r++) {
-                for (let c = 0; c < cols; c++) {
-                    layerPositions.push([layer, r, c]);
-                }
-            }
-
-            // 随机洗牌并选择部分位置
-            this.shuffleArray(layerPositions);
-            positions.push(...layerPositions.slice(0, positionsInLayer));
-        }
-
-        return positions;
-    }
-
-    /**
      * 验证牌堆的可解性（适配一维数组）
      * 确保每种类型的卡片数量都是3的倍数
      */
@@ -1598,41 +1571,12 @@ class SheepGame {
         }, 3000);
     }
 
-    // 播放音效（改进版）
     playSound(sound) {
         if (!this.soundEnabled) return;
-
-        // 实际项目中可以加载音频文件
-        // 这里使用Web Audio API或HTML5 Audio实现
-        // 为了演示，使用控制台输出
-        console.log(`🔊 播放音效: ${sound}`);
-
-        // 示例：可以使用HTML5 Audio API
+        // TODO: 加载实际音频文件，例如:
         // const audio = new Audio(`sounds/${sound}.mp3`);
         // audio.volume = 0.5;
-        // audio.play().catch(err => console.log('音频播放失败:', err));
-
-        // 简单的视觉反馈
-        this.provideSoundFeedback(sound);
-    }
-
-    /**
-     * 提供音效的视觉反馈
-     */
-    provideSoundFeedback(sound) {
-        // 可以添加简单的视觉效果来替代音效
-        const feedbackMap = {
-            'click': '✓',
-            'match': '✨',
-            'tool': '🔧',
-            'shuffle': '🔄',
-            'hint': '💡',
-            'win': '🎉',
-            'lose': '😢'
-        };
-
-        const emoji = feedbackMap[sound] || '🔊';
-        // 可以在这里添加一些动画效果
+        // audio.play().catch(() => {});
     }
 
     // 渲染卡片（金字塔式堆叠版本）
@@ -1644,11 +1588,14 @@ class SheepGame {
         const allCards = this.state.deck.filter(card => card && !card.removed);
         allCards.sort((a, b) => a.zIndex - b.zIndex);
 
+        // 计算一次布局参数，避免每张卡片重复触发 DOM 读取
+        const layout = this.calculateCardLayout();
+
         // 使用DocumentFragment批量添加DOM元素，提升性能
         const fragment = document.createDocumentFragment();
 
         allCards.forEach(card => {
-            const cardEl = this.createCardElement(card);
+            const cardEl = this.createCardElement(card, layout);
             fragment.appendChild(cardEl);
         });
 
@@ -1718,19 +1665,16 @@ class SheepGame {
 
     /**
      * 创建单个卡片元素（自适应版本 - 所有卡片统一尺寸）
+     * @param {Object} card - 卡片数据
+     * @param {Object} [layout] - 预计算的布局参数，避免重复 DOM 查询
      */
-    createCardElement(card) {
+    createCardElement(card, layout) {
         const cardEl = document.createElement('div');
 
-        // 基于可见性和可点击性添加语义化 class：
-        // - 完全可见且可点击：card-selectable（高亮）
-        // - 部分可见或被遮挡：card-disabled（置灰，不可点击）
-        // - 完全不可见：hidden
         const classList = ['card'];
         if (!card.visible) {
             classList.push('hidden');
         } else {
-            // 与点击逻辑保持一致：只有 visibleAreaRatio >= 0.99 才可点击
             if (card.visibleAreaRatio !== undefined && card.visibleAreaRatio >= 0.99) {
                 classList.push('card-selectable');
             } else {
@@ -1740,8 +1684,7 @@ class SheepGame {
         cardEl.className = classList.join(' ');
         cardEl.dataset.id = card.id;
 
-        // 获取自适应布局参数
-        const layout = this.calculateCardLayout();
+        if (!layout) layout = this.calculateCardLayout();
 
         // 计算卡片在网格中的位置；同格堆叠时按 layer 做视觉偏移，露出下层边缘
         const stackOffset = layout.stackOffsetPerLayer ?? layout.layerOffset ?? 3;
@@ -2634,89 +2577,24 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 500);
 });
 
-// ==================== 调试工具函数 ====================
-
-/**
- * 调试工具：查看卡片覆盖关系
- */
-function debugCoverage() {
-    console.log('=== 卡片覆盖关系调试 ===');
-
-    let totalCards = 0;
-    let visibleCards = 0;
-    let coveredCards = 0;
-
-    game.state.deck.forEach(card => {
-        if (card && !card.removed) {
-            totalCards++;
-            if (card.visible) {
-                visibleCards++;
-            } else {
-                coveredCards++;
-            }
-        }
-    });
-
-    console.log(`总卡片: ${totalCards}`);
-    console.log(`可见: ${visibleCards} (${(visibleCards / totalCards * 100).toFixed(1)}%)`);
-    console.log(`被覆盖: ${coveredCards} (${(coveredCards / totalCards * 100).toFixed(1)}%)`);
-
-    return { totalCards, visibleCards, coveredCards };
-}
-
-/**
- * 调试工具：查看偏移卡片
- */
-function debugOffsetCards() {
-    const offsetCards = game.state.deck.filter(card =>
-        card && (card.row % 1 !== 0 || card.col % 1 !== 0)
-    );
-
-    console.log('=== 偏移卡片统计 ===');
-    console.log(`偏移卡片数量: ${offsetCards.length}`);
-    console.log(`总卡片数量: ${game.state.deck.length}`);
-    console.log(`偏移比例: ${(offsetCards.length / game.state.deck.length * 100).toFixed(1)}%`);
-
-    console.log('\n前5个偏移卡片:');
-    offsetCards.slice(0, 5).forEach(card => {
-        console.log(`  ${card.id}: 位置(${card.row}, ${card.col}), 层级${card.layer}, ${card.visible ? '可见' : '被覆盖'}`);
-    });
-
-    return offsetCards;
-}
-
-/**
- * 调试工具：测试特定卡片的覆盖情况
- */
-function debugCardCoverage(cardId) {
-    const card = game.findCardById(cardId);
-    if (!card) {
-        console.log('卡片未找到:', cardId);
-        return;
-    }
-
-    console.log('=== 卡片详情 ===');
-    console.log(`ID: ${card.id}`);
-    console.log(`位置: (${card.row}, ${card.col})`);
-    console.log(`层级: ${card.layer}`);
-    console.log(`类型: ${card.type}`);
-    console.log(`状态: ${card.visible ? '可见✓' : '被覆盖✗'}`);
-
-    // 检查是哪张卡片覆盖了它
-    if (!card.visible && !card.removed) {
-        console.log('\n被以下卡片覆盖:');
-        game.state.deck.forEach(upperCard => {
-            if (!upperCard || upperCard.removed) return;
-            if (upperCard.layer <= card.layer) return;
-
-            if (game.checkCardsOverlap(card, upperCard)) {
-                console.log(`  - ${upperCard.id}: 位置(${upperCard.row}, ${upperCard.col}), 层级${upperCard.layer}`);
+// ==================== 调试工具函数（仅开发环境） ====================
+if (typeof window !== 'undefined' && window.location && window.location.hostname === 'localhost') {
+    window.debugCoverage = function () {
+        let totalCards = 0, visibleCards = 0, coveredCards = 0;
+        game.state.deck.forEach(card => {
+            if (card && !card.removed) {
+                totalCards++;
+                if (card.visible) visibleCards++;
+                else coveredCards++;
             }
         });
-    }
-}
+        console.log(`总卡片: ${totalCards}, 可见: ${visibleCards}, 被覆盖: ${coveredCards}`);
+        return { totalCards, visibleCards, coveredCards };
+    };
 
-console.log('💡 调试工具已加载！');
-console.log('使用 debugCoverage() 查看覆盖统计');
-console.log('使用 debugOffsetCards() 查看偏移卡片');
-console.log('使用 debugCardCoverage("card-id") 查看特定卡片');
+    window.debugCardCoverage = function (cardId) {
+        const card = game.findCardById(cardId);
+        if (!card) { console.log('卡片未找到:', cardId); return; }
+        console.log(`${card.id}: (${card.row}, ${card.col}) 层级${card.layer} ${card.visible ? '可见✓' : '被覆盖✗'}`);
+    };
+}

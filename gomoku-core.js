@@ -37,17 +37,17 @@
         return false;
     }
 
-    function scoreLine(arr, color) {
+    function scoreDirection(board, startR, startC, dr, dc, length, color) {
         const opp = color === BLACK ? WHITE : BLACK;
         let score = 0;
         let i = 0;
-        while (i < arr.length) {
-            if (arr[i] !== color) { i++; continue; }
+        while (i < length) {
+            if (board[startR + i * dr][startC + i * dc] !== color) { i++; continue; }
             let count = 0;
             const start = i;
-            while (i < arr.length && arr[i] === color) { count++; i++; }
-            const leftBlock = (start - 1 < 0) || (arr[start - 1] === opp);
-            const rightBlock = (i >= arr.length) || (arr[i] === opp);
+            while (i < length && board[startR + i * dr][startC + i * dc] === color) { count++; i++; }
+            const leftBlock = (start === 0) || (board[startR + (start - 1) * dr][startC + (start - 1) * dc] === opp);
+            const rightBlock = (i >= length) || (board[startR + i * dr][startC + i * dc] === opp);
             const blocked = (leftBlock ? 1 : 0) + (rightBlock ? 1 : 0);
             if (count >= 5) score += 500000;
             else if (count === 4) score += blocked === 0 ? 80000 : (blocked === 1 ? 8000 : 0);
@@ -61,19 +61,20 @@
     function evaluateBoard(board, color) {
         let total = 0;
         for (let i = 0; i < BOARD_SIZE; i++) {
-            total += scoreLine(board[i].slice(), color);
-            total += scoreLine(board.map(r => r[i]), color);
+            total += scoreDirection(board, i, 0, 0, 1, BOARD_SIZE, color);
+            total += scoreDirection(board, 0, i, 1, 0, BOARD_SIZE, color);
         }
-        for (let d = -BOARD_SIZE; d <= BOARD_SIZE; d++) {
-            const diag = [], anti = [];
-            for (let i = 0; i < BOARD_SIZE; i++) {
-                const j = i + d;
-                if (j >= 0 && j < BOARD_SIZE) diag.push(board[i][j]);
-                const k = BOARD_SIZE - 1 - i + d;
-                if (k >= 0 && k < BOARD_SIZE) anti.push(board[i][k]);
-            }
-            if (diag.length >= 5) total += scoreLine(diag, color);
-            if (anti.length >= 5) total += scoreLine(anti, color);
+        for (let d = -(BOARD_SIZE - 1); d < BOARD_SIZE; d++) {
+            const startR = d >= 0 ? 0 : -d;
+            const startC = d >= 0 ? d : 0;
+            const len = BOARD_SIZE - Math.abs(d);
+            if (len >= 5) total += scoreDirection(board, startR, startC, 1, 1, len, color);
+        }
+        for (let d = 0; d < 2 * BOARD_SIZE - 1; d++) {
+            const startR = d < BOARD_SIZE ? 0 : d - BOARD_SIZE + 1;
+            const startC = d < BOARD_SIZE ? d : BOARD_SIZE - 1;
+            const len = d < BOARD_SIZE ? d + 1 : 2 * BOARD_SIZE - 1 - d;
+            if (len >= 5) total += scoreDirection(board, startR, startC, 1, -1, len, color);
         }
         return total;
     }
